@@ -52,6 +52,9 @@ export function ModelSelect(
   )
   const [open, setOpen] = useState(false)
   const [pane, setPane] = useState<Pane>('root')
+  // Model pane search: provider filter + free-text model name search.
+  const [searchQuery, setSearchQuery] = useState('')
+  const [providerFilter, setProviderFilter] = useState<string | null>(null)
   // The in-menu error strip serves catalog loads (its Retry re-runs the
   // load); a rejected SELECTION announces through the transient toast
   // instead, so the strip renders only while the latest failure-capable
@@ -102,6 +105,20 @@ export function ModelSelect(
     ], [reasoning, t])
   const busy = state.status === 'selecting'
 
+  // Filtered groups for the model pane: provider filter + free-text search.
+  const filteredGroups = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase()
+    return state.groups
+      .filter(group => providerFilter === null || group.id === providerFilter)
+      .map(group => ({
+        ...group,
+        models: group.models.filter(model =>
+          query === '' || model.name.toLowerCase().includes(query) || model.id.toLowerCase().includes(query),
+        ),
+      }))
+      .filter(group => group.models.length > 0)
+  }, [state.groups, providerFilter, searchQuery])
+
   const reload = (): void => {
     lastActionRef.current = 'load'
     load()
@@ -128,6 +145,8 @@ export function ModelSelect(
 
   const show = (): void => {
     setPane('root')
+    setSearchQuery('')
+    setProviderFilter(null)
     setOpen(true)
     reload()
   }
@@ -135,6 +154,8 @@ export function ModelSelect(
   const close = (restoreFocus = false): void => {
     setOpen(false)
     setPane('root')
+    setSearchQuery('')
+    setProviderFilter(null)
     if (restoreFocus) queueMicrotask(() => { triggerRef.current?.focus() })
   }
 
@@ -283,8 +304,31 @@ export function ModelSelect(
                   <button type="button" className={css.retry} onClick={reload}>{t('retry')}</button>
                 </div>
               ))}
+              {state.groups.length > 1 && (
+                <div className={css.filterRow}>
+                  <input
+                    type="text"
+                    className={css.searchInput}
+                    placeholder={t('search.placeholder')}
+                    value={searchQuery}
+                    onChange={(e) => { setSearchQuery(e.target.value) }}
+                    onKeyDown={(e) => { e.stopPropagation() }}
+                  />
+                  <select
+                    className={css.providerSelect}
+                    value={providerFilter ?? ''}
+                    onChange={(e) => { setProviderFilter(e.target.value === '' ? null : e.target.value) }}
+                    onKeyDown={(e) => { e.stopPropagation() }}
+                  >
+                    <option value="">{t('filter.allProviders')}</option>
+                    {state.groups.map(group => (
+                      <option key={group.id} value={group.id}>{group.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div className={clsx(css.groups, 'scrollable')}>
-                {state.groups.map((group) => {
+                {filteredGroups.map((group) => {
                   const headingId = `${id}-${group.id}`
                   return (
                     <section role="group" aria-labelledby={headingId} className={css.group} key={group.id}>
@@ -319,8 +363,12 @@ export function ModelSelect(
                   )
                 })}
               </div>
-              {state.status === 'ready' && choices.length === 0 && (
-                <div className={css.empty}>{t('empty.models')}</div>
+              {state.status === 'ready' && filteredGroups.length === 0 && (
+                <div className={css.empty}>
+                  {searchQuery.trim() !== '' || providerFilter !== null
+                    ? t('search.noResults')
+                    : t('empty.models')}
+                </div>
               )}
             </>
           )}
