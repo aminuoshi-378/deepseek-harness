@@ -54,6 +54,19 @@ export const zh = {
   // ── 来源标签 ──
   builtinTag: '内置',
   thirdPartyTag: '第三方',
+  // ── 批量操作 ──
+  batchEnable: '批量启用',
+  batchDisable: '批量禁用',
+  batchUninstall: '批量卸载',
+  batchSelectAll: '全选',
+  batchSelectNone: '取消全选',
+  batchSelected: '已选 {count} 项',
+  batchEnableConfirm: '确定要启用选中的 {count} 个插件吗？',
+  batchDisableConfirm: '确定要禁用选中的 {count} 个插件吗？',
+  batchUninstallConfirm: '确定要卸载选中的 {count} 个插件吗？（内置插件不会被卸载）',
+  batchInProgress: '正在批量操作…',
+  batchPartialFailed: '{failed} 个插件操作失败',
+  batchDone: '{count} 个插件操作完成',
 } satisfies Record<string, string>
 
 /** Plugin inventory locale key union. */
@@ -113,4 +126,17 @@ export const en = {
   // ── Source tags ──
   builtinTag: 'Built-in',
   thirdPartyTag: 'Third-party',
+  // ── Batch operations ──
+  batchEnable: 'Enable selected',
+  batchDisable: 'Disable selected',
+  batchUninstall: 'Uninstall selected',
+  batchSelectAll: 'Select all',
+  batchSelectNone: 'Clear selection',
+  batchSelected: '{count} selected',
+  batchEnableConfirm: 'Enable {count} selected plugins?',
+  batchDisableConfirm: 'Disable {count} selected plugins?',
+  batchUninstallConfirm: 'Uninstall {count} selected plugins? (built-in plugins will be skipped)',
+  batchInProgress: 'Batch operation in progress…',
+  batchPartialFailed: '{failed} plugins failed',
+  batchDone: '{count} plugins processed',
 } satisfies Record<PluginInventoryLocaleKey, string>

@@ -119,6 +119,86 @@
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--dsw-alias-state-business-primary) 18%, transparent);
 }
 
+/* ── Batch toolbar ── */
+
+.batchToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.batchSelectBtn,
+.batchEnableBtn,
+.batchDisableBtn,
+.batchUninstallBtn {
+  height: 28px;
+  border-radius: 6px;
+  padding: 0 10px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.batchSelectBtn {
+  border: 1px solid var(--dsw-alias-border-l2);
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+}
+
+.batchSelectBtn:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.batchCount {
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.batchEnableBtn {
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-state-success-primary) 40%, transparent);
+  background: transparent;
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.batchEnableBtn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 8%, transparent);
+}
+
+.batchDisableBtn {
+  border: 1px solid var(--dsw-alias-border-l2);
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.batchDisableBtn:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.batchUninstallBtn {
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-state-error-primary) 40%, transparent);
+  background: transparent;
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.batchUninstallBtn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 8%, transparent);
+}
+
+.batchSelectBtn:disabled,
+.batchEnableBtn:disabled,
+.batchDisableBtn:disabled,
+.batchUninstallBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .installButton {
   margin-left: auto;
   height: 32px;
@@ -262,6 +342,21 @@
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 10px;
   background: var(--dsw-alias-bg-layer-3);
+  display: flex;
+  align-items: flex-start;
+}
+
+.cardCheckbox {
+  flex: none;
+  margin: 14px 0 0 10px;
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--dsw-alias-state-business-primary);
+}
+
+.cardCheckbox:disabled {
+  cursor: not-allowed;
 }
 
 .card[data-open='true'] {

@@ -93,6 +93,8 @@ export function PluginInventorySettingsTab({ list, setEnabled, uninstall, instal
   const [actionError, setActionError] = useState<string | null>(null)
   const [showInstall, setShowInstall] = useState(false)
   const [installName, setInstallName] = useState('')
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [batchInProgress, setBatchInProgress] = useState(false)
 
   const refresh = useCallback(() => {
     setRequest(value => value + 1)
@@ -194,6 +196,56 @@ export function PluginInventorySettingsTab({ list, setEnabled, uninstall, instal
     }
   }, [install, installName, refresh, t])
 
+  const toggleSelect = useCallback((entryId: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(entryId)) next.delete(entryId)
+      else next.add(entryId)
+      return next
+    })
+  }, [])
+
+  const selectAllFiltered = useCallback(() => {
+    setSelected(new Set(filteredEntries.map(e => e.entryId)))
+  }, [filteredEntries])
+
+  const clearSelection = useCallback(() => {
+    setSelected(new Set())
+  }, [])
+
+  const handleBatch = useCallback(async (action: 'enable' | 'disable' | 'uninstall') => {
+    const targets = filteredEntries.filter(e => selected.has(e.entryId))
+    if (targets.length === 0) return
+    const confirmMsg = action === 'enable'
+      ? t('batchEnableConfirm').replace('{count}', String(targets.length))
+      : action === 'disable'
+        ? t('batchDisableConfirm').replace('{count}', String(targets.length))
+        : t('batchUninstallConfirm').replace('{count}', String(targets.length))
+    if (!globalThis.confirm(confirmMsg)) return
+    setBatchInProgress(true)
+    setActionError(null)
+    let failed = 0
+    for (const entry of targets) {
+      try {
+        if (action === 'enable' || action === 'disable') {
+          const result = await setEnabled(entry.entryId, action === 'enable')
+          if (!result.ok) failed++
+        } else {
+          const result = await uninstall(entry.entryId)
+          if (!result.ok) failed++
+        }
+      } catch {
+        failed++
+      }
+    }
+    setSelected(new Set())
+    refresh()
+    setBatchInProgress(false)
+    if (failed > 0) {
+      setActionError(t('batchPartialFailed').replace('{failed}', String(failed)))
+    }
+  }, [filteredEntries, selected, setEnabled, uninstall, refresh, t])
+
   return (
     <div className={css.section} aria-busy={state.status === 'loading'}>
       {state.status === 'loading' ? <p className={css.status}>{t('loading')}</p> : null}
@@ -290,6 +342,51 @@ export function PluginInventorySettingsTab({ list, setEnabled, uninstall, instal
             <p className={css.actionError} role="alert">{actionError}</p>
           ) : null}
 
+          {/* Batch toolbar */}
+          {filteredEntries.length > 0 ? (
+            <div className={css.batchToolbar}>
+              <button
+                type="button"
+                className={css.batchSelectBtn}
+                disabled={batchInProgress}
+                onClick={selected.size === filteredEntries.length ? clearSelection : selectAllFiltered}
+              >
+                {selected.size === filteredEntries.length ? t('batchSelectNone') : t('batchSelectAll')}
+              </button>
+              {selected.size > 0 ? (
+                <>
+                  <span className={css.batchCount}>
+                    {t('batchSelected').replace('{count}', String(selected.size))}
+                  </span>
+                  <button
+                    type="button"
+                    className={css.batchEnableBtn}
+                    disabled={batchInProgress}
+                    onClick={() => { void handleBatch('enable') }}
+                  >
+                    {t('batchEnable')}
+                  </button>
+                  <button
+                    type="button"
+                    className={css.batchDisableBtn}
+                    disabled={batchInProgress}
+                    onClick={() => { void handleBatch('disable') }}
+                  >
+                    {t('batchDisable')}
+                  </button>
+                  <button
+                    type="button"
+                    className={css.batchUninstallBtn}
+                    disabled={batchInProgress}
+                    onClick={() => { void handleBatch('uninstall') }}
+                  >
+                    {batchInProgress ? t('batchInProgress') : t('batchUninstall')}
+                  </button>
+                </>
+              ) : null}
+            </div>
+          ) : null}
+
           {/* Plugin count */}
           <div className={css.catalogHeading}>
             <h3>{t('catalog')}</h3>
@@ -318,6 +415,14 @@ export function PluginInventorySettingsTab({ list, setEnabled, uninstall, instal
                     data-open={open ? 'true' : undefined}
                     data-source={entry.source}
                   >
+                    <input
+                      type="checkbox"
+                      className={css.cardCheckbox}
+                      checked={selected.has(entry.entryId)}
+                      disabled={batchInProgress}
+                      aria-label={`${title} ${t('source')}: ${sourceLabel}`}
+                      onChange={() => { toggleSelect(entry.entryId) }}
+                    />
                     <button
                       className={css.cardContent}
                       type="button"
