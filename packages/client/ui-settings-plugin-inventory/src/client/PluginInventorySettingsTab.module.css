@@ -337,22 +337,23 @@
 }
 
 .card {
+  position: relative;
   min-width: 0;
   overflow: hidden;
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 10px;
   background: var(--dsw-alias-bg-layer-3);
-  display: flex;
-  align-items: flex-start;
 }
 
 .cardCheckbox {
-  flex: none;
-  margin: 14px 0 0 10px;
+  position: absolute;
+  top: 14px;
+  left: 10px;
   width: 16px;
   height: 16px;
   cursor: pointer;
   accent-color: var(--dsw-alias-state-business-primary);
+  z-index: 1;
 }
 
 .cardCheckbox:disabled {
@@ -373,7 +374,7 @@
   width: 100%;
   min-height: 52px;
   border: 0;
-  padding: 12px 14px;
+  padding: 12px 14px 12px 34px;
   background: transparent;
   color: inherit;
   font: inherit;
@@ -484,7 +485,7 @@
 
 .cardDetails {
   border-top: 1px solid var(--dsw-alias-border-l2);
-  padding: 10px 14px 12px;
+  padding: 10px 14px 12px 34px;
   background: var(--dsw-alias-bg-module-platform);
 }
 
