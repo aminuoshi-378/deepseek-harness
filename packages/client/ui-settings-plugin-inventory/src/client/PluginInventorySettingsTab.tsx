@@ -1,5 +1,10 @@
-import { useEffect, useId, useMemo, useState, type ReactNode } from 'react'
-import type { PluginInventorySnapshot } from '@deepseek-ai/dsh-api-remotes/client'
+import { useCallback, useEffect, useId, useMemo, useState, type ReactNode } from 'react'
+import type {
+  PluginInventoryInstallResult,
+  PluginInventorySnapshot,
+  PluginInventoryToggleResult,
+  PluginInventoryUninstallResult,
+} from '@deepseek-ai/dsh-api-remotes/client'
 import {
   IconChevronDownOutline14,
   IconSearchOutline16,
@@ -12,10 +17,18 @@ import css from './PluginInventorySettingsTab.module.css'
 export interface PluginInventorySettingsTabInjected {
   /** Read a current Host inventory snapshot. */
   list: () => Promise<PluginInventorySnapshot>
+  /** Toggle a plugin entry's enabled state. */
+  setEnabled: (entryId: string, enabled: boolean) => Promise<PluginInventoryToggleResult>
+  /** Uninstall a plugin entry. */
+  uninstall: (entryId: string) => Promise<PluginInventoryUninstallResult>
+  /** Install a new plugin entry by module name. */
+  install: (moduleName: string) => Promise<PluginInventoryInstallResult>
 }
 
 type PluginInventoryEntry = PluginInventorySnapshot['entries'][number]
 type PluginFiberPhase = PluginInventoryEntry['fiberPhase']
+type PluginEntrySource = PluginInventoryEntry['source']
+type PluginEntryType = PluginInventoryEntry['type']
 
 /** Full component props assembled by the Settings slot renderer. */
 export type PluginInventorySettingsTabProps =
@@ -53,20 +66,37 @@ function moduleShortName(moduleName: string): string {
     .replace(/^dsh-(?:host-|client-)?/, '')
 }
 
-/** Whether an inventory row matches the local catalog query. */
-function matches(entry: PluginInventoryEntry, normalizedQuery: string): boolean {
+/** Whether an inventory row matches the local catalog query and filters. */
+function matches(
+  entry: PluginInventoryEntry,
+  normalizedQuery: string,
+  sourceFilter: PluginEntrySource | 'all',
+  typeFilter: PluginEntryType | 'all',
+): boolean {
+  if (sourceFilter !== 'all' && entry.source !== sourceFilter) return false
+  if (typeFilter !== 'all' && entry.type !== typeFilter) return false
   if (normalizedQuery.length === 0) return true
-  return [entry.moduleName, entry.entryId]
+  return [entry.moduleName, entry.entryId, entry.description, entry.type, entry.source]
     .some(value => value.toLocaleLowerCase().includes(normalizedQuery))
 }
 
-/** Render the read-only current Loader inventory. */
-export function PluginInventorySettingsTab({ list, t }: PluginInventorySettingsTabProps): ReactNode {
+/** Render the plugin inventory with filtering, source/type facets, and management actions. */
+export function PluginInventorySettingsTab({ list, setEnabled, uninstall, install, t }: PluginInventorySettingsTabProps): ReactNode {
   const catalogId = useId()
   const [request, setRequest] = useState(0)
   const [query, setQuery] = useState('')
   const [expanded, setExpanded] = useState<PluginInventoryEntry['entryId'] | null>(null)
+  const [sourceFilter, setSourceFilter] = useState<PluginEntrySource | 'all'>('all')
+  const [typeFilter, setTypeFilter] = useState<PluginEntryType | 'all'>('all')
   const [state, setState] = useState<ViewState>({ status: 'loading' })
+  const [actionInProgress, setActionInProgress] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const [showInstall, setShowInstall] = useState(false)
+  const [installName, setInstallName] = useState('')
+
+  const refresh = useCallback(() => {
+    setRequest(value => value + 1)
+  }, [])
 
   useEffect(() => {
     let current = true
@@ -78,11 +108,23 @@ export function PluginInventorySettingsTab({ list, t }: PluginInventorySettingsT
   }, [list, request])
 
   const normalizedQuery = query.trim().toLocaleLowerCase()
+
+  // Collect available types from the snapshot for the type filter dropdown.
+  const availableTypes = useMemo(() => {
+    if (state.status !== 'ready') return [] as PluginEntryType[]
+    const types = new Set<PluginEntryType>()
+    for (const entry of state.snapshot.entries) {
+      if (sourceFilter !== 'all' && entry.source !== sourceFilter) continue
+      types.add(entry.type)
+    }
+    return [...types].sort()
+  }, [state, sourceFilter])
+
   const filteredEntries = useMemo(
     () => state.status === 'ready'
-      ? state.snapshot.entries.filter(entry => matches(entry, normalizedQuery))
+      ? state.snapshot.entries.filter(entry => matches(entry, normalizedQuery, sourceFilter, typeFilter))
       : [],
-    [normalizedQuery, state],
+    [normalizedQuery, state, sourceFilter, typeFilter],
   )
 
   useEffect(() => {
@@ -93,8 +135,64 @@ export function PluginInventorySettingsTab({ list, t }: PluginInventorySettingsT
 
   const retry = (): void => {
     setState({ status: 'loading' })
-    setRequest(value => value + 1)
+    refresh()
   }
+
+  const handleToggle = useCallback(async (entry: PluginInventoryEntry) => {
+    setActionInProgress(entry.entryId)
+    setActionError(null)
+    try {
+      const result = await setEnabled(entry.entryId, !entry.enabled)
+      if (!result.ok) {
+        setActionError(result.message)
+      } else {
+        refresh()
+      }
+    } catch {
+      setActionError(t('toggleFailed'))
+    } finally {
+      setActionInProgress(null)
+    }
+  }, [setEnabled, refresh, t])
+
+  const handleUninstall = useCallback(async (entry: PluginInventoryEntry) => {
+    if (!globalThis.confirm(t('uninstallConfirm'))) return
+    setActionInProgress(entry.entryId)
+    setActionError(null)
+    try {
+      const result = await uninstall(entry.entryId)
+      if (!result.ok) {
+        setActionError(result.reason === 'builtin-protected' ? t('builtinProtected') : result.message)
+      } else {
+        refresh()
+      }
+    } catch {
+      setActionError(t('uninstallFailed'))
+    } finally {
+      setActionInProgress(null)
+    }
+  }, [uninstall, refresh, t])
+
+  const handleInstall = useCallback(async () => {
+    const name = installName.trim()
+    if (!name) return
+    setActionInProgress('__install__')
+    setActionError(null)
+    try {
+      const result = await install(name)
+      if (!result.ok) {
+        setActionError(result.message)
+      } else {
+        setInstallName('')
+        setShowInstall(false)
+        refresh()
+      }
+    } catch {
+      setActionError(t('installFailed'))
+    } finally {
+      setActionInProgress(null)
+    }
+  }, [install, installName, refresh, t])
 
   return (
     <div className={css.section} aria-busy={state.status === 'loading'}>
@@ -107,6 +205,7 @@ export function PluginInventorySettingsTab({ list, t }: PluginInventorySettingsT
       ) : null}
       {state.status === 'ready' ? (
         <div className={css.catalog}>
+          {/* Search bar */}
           <label className={css.search}>
             <IconSearchOutline16 aria-hidden="true" />
             <span className={css.visuallyHidden}>{t('search')}</span>
@@ -118,10 +217,85 @@ export function PluginInventorySettingsTab({ list, t }: PluginInventorySettingsT
               onChange={(event) => { setQuery(event.currentTarget.value) }}
             />
           </label>
+
+          {/* Filters */}
+          <div className={css.filters}>
+            <label className={css.filter}>
+              <span>{t('source')}</span>
+              <select
+                value={sourceFilter}
+                onChange={(e) => { setSourceFilter(e.target.value as PluginEntrySource | 'all'); setTypeFilter('all') }}
+                aria-label={t('source')}
+              >
+                <option value="all">{t('sourceAll')}</option>
+                <option value="builtin">{t('sourceBuiltin')}</option>
+                <option value="third-party">{t('sourceThirdParty')}</option>
+              </select>
+            </label>
+            <label className={css.filter}>
+              <span>{t('type')}</span>
+              <select
+                value={typeFilter}
+                onChange={(e) => { setTypeFilter(e.target.value as PluginEntryType | 'all') }}
+                aria-label={t('type')}
+              >
+                <option value="all">{t('typeAll')}</option>
+                {availableTypes.map(type => (
+                  <option key={type} value={type}>{type}</option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              className={css.installButton}
+              onClick={() => { setShowInstall(s => !s) }}
+            >
+              {t('install')}
+            </button>
+          </div>
+
+          {/* Install panel */}
+          {showInstall ? (
+            <div className={css.installPanel}>
+              <label className={css.installField}>
+                <span>{t('installModuleName')}</span>
+                <input
+                  type="text"
+                  value={installName}
+                  placeholder={t('installModuleNamePlaceholder')}
+                  onChange={(e) => { setInstallName(e.target.value) }}
+                />
+              </label>
+              <div className={css.installActions}>
+                <button
+                  type="button"
+                  className={css.installConfirm}
+                  disabled={!installName.trim() || actionInProgress === '__install__'}
+                  onClick={() => { void handleInstall() }}
+                >
+                  {actionInProgress === '__install__' ? t('installing') : t('installConfirm')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setShowInstall(false); setInstallName('') }}
+                >
+                  {t('installCancel')}
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          {/* Error banner */}
+          {actionError ? (
+            <p className={css.actionError} role="alert">{actionError}</p>
+          ) : null}
+
+          {/* Plugin count */}
           <div className={css.catalogHeading}>
             <h3>{t('catalog')}</h3>
             <span data-plugin-count={filteredEntries.length}>{filteredEntries.length}</span>
           </div>
+
           {state.snapshot.entries.length === 0 ? <p className={css.status}>{t('empty')}</p> : null}
           {state.snapshot.entries.length > 0 && filteredEntries.length === 0
             ? <p className={css.status}>{t('emptySearch')}</p>
@@ -132,14 +306,17 @@ export function PluginInventorySettingsTab({ list, t }: PluginInventorySettingsT
                 const status = phaseLabel(entry.fiberPhase, t)
                 const title = moduleShortName(entry.moduleName)
                 const configuration = t(entry.enabled ? 'enabledTag' : 'disabledTag')
+                const sourceLabel = t(entry.source === 'builtin' ? 'builtinTag' : 'thirdPartyTag')
                 const open = expanded === entry.entryId
                 const detailId = `${catalogId}-details-${encodeURIComponent(entry.entryId)}`
+                const busy = actionInProgress === entry.entryId
                 return (
                   <li
                     className={css.card}
                     key={entry.entryId}
                     data-plugin-entry={entry.entryId}
                     data-open={open ? 'true' : undefined}
+                    data-source={entry.source}
                   >
                     <button
                       className={css.cardContent}
@@ -153,6 +330,7 @@ export function PluginInventorySettingsTab({ list, t }: PluginInventorySettingsT
                     >
                       <strong className={css.cardTitle} title={entry.moduleName}>{title}</strong>
                       <span className={css.cardTrailing}>
+                        <span className={css.sourceTag} data-source={entry.source}>{sourceLabel}</span>
                         {entry.enabled ? (
                           <span
                             className={css.statusDot}
@@ -173,6 +351,22 @@ export function PluginInventorySettingsTab({ list, t }: PluginInventorySettingsT
                         <code className={css.entryValue} data-loader-entry>{entry.entryId}</code>
                         <dl className={css.details}>
                           <div>
+                            <dt>{t('module')}</dt>
+                            <dd>{entry.moduleName}</dd>
+                          </div>
+                          <div>
+                            <dt>{t('description')}</dt>
+                            <dd>{entry.description}</dd>
+                          </div>
+                          <div>
+                            <dt>{t('source')}</dt>
+                            <dd>{sourceLabel}</dd>
+                          </div>
+                          <div>
+                            <dt>{t('type')}</dt>
+                            <dd>{entry.type}</dd>
+                          </div>
+                          <div>
                             <dt>{t('configuration')}</dt>
                             <dd>{configuration}</dd>
                           </div>
@@ -183,6 +377,25 @@ export function PluginInventorySettingsTab({ list, t }: PluginInventorySettingsT
                             </div>
                           ) : null}
                         </dl>
+                        <div className={css.cardActions}>
+                          <button
+                            type="button"
+                            className={css.toggleBtn}
+                            disabled={busy}
+                            onClick={() => { void handleToggle(entry) }}
+                          >
+                            {busy ? t('toggling') : entry.enabled ? t('disable') : t('enable')}
+                          </button>
+                          <button
+                            type="button"
+                            className={css.uninstallBtn}
+                            disabled={busy || entry.source === 'builtin'}
+                            title={entry.source === 'builtin' ? t('builtinProtected') : undefined}
+                            onClick={() => { void handleUninstall(entry) }}
+                          >
+                            {busy ? t('uninstalling') : t('uninstall')}
+                          </button>
+                        </div>
                       </div>
                     ) : null}
                   </li>

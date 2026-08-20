@@ -20,6 +20,40 @@ export const zh = {
   active: '已挂载',
   failed: '挂载失败',
   unloading: '卸载中',
+  // ── 来源筛选 ──
+  source: '来源',
+  sourceAll: '全部来源',
+  sourceBuiltin: '内置',
+  sourceThirdParty: '第三方',
+  // ── 类型筛选 ──
+  type: '类型',
+  typeAll: '全部类型',
+  // ── 插件详情 ──
+  description: '用途',
+  module: '模块名',
+  // ── 操作按钮 ──
+  enable: '启用',
+  disable: '禁用',
+  uninstall: '卸载',
+  install: '安装插件',
+  installModuleName: '模块名',
+  installModuleNamePlaceholder: '如 @scope/my-plugin',
+  installConfig: '配置（可选）',
+  installConfigPlaceholder: 'JSON 配置',
+  installConfirm: '确认安装',
+  installCancel: '取消',
+  // ── 操作状态 ──
+  toggling: '正在切换…',
+  uninstalling: '正在卸载…',
+  installing: '正在安装…',
+  toggleFailed: '切换失败',
+  uninstallFailed: '卸载失败',
+  installFailed: '安装失败',
+  builtinProtected: '内置插件不可卸载',
+  uninstallConfirm: '确定要卸载此插件吗？',
+  // ── 来源标签 ──
+  builtinTag: '内置',
+  thirdPartyTag: '第三方',
 } satisfies Record<string, string>
 
 /** Plugin inventory locale key union. */
@@ -45,4 +79,38 @@ export const en = {
   active: 'Mounted',
   failed: 'Mount failed',
   unloading: 'Unloading',
+  // ── Source filter ──
+  source: 'Source',
+  sourceAll: 'All sources',
+  sourceBuiltin: 'Built-in',
+  sourceThirdParty: 'Third-party',
+  // ── Type filter ──
+  type: 'Type',
+  typeAll: 'All types',
+  // ── Plugin details ──
+  description: 'Purpose',
+  module: 'Module name',
+  // ── Action buttons ──
+  enable: 'Enable',
+  disable: 'Disable',
+  uninstall: 'Uninstall',
+  install: 'Install plugin',
+  installModuleName: 'Module name',
+  installModuleNamePlaceholder: 'e.g. @scope/my-plugin',
+  installConfig: 'Config (optional)',
+  installConfigPlaceholder: 'JSON config',
+  installConfirm: 'Confirm install',
+  installCancel: 'Cancel',
+  // ── Action status ──
+  toggling: 'Toggling…',
+  uninstalling: 'Uninstalling…',
+  installing: 'Installing…',
+  toggleFailed: 'Toggle failed',
+  uninstallFailed: 'Uninstall failed',
+  installFailed: 'Install failed',
+  builtinProtected: 'Built-in plugins cannot be uninstalled',
+  uninstallConfirm: 'Are you sure you want to uninstall this plugin?',
+  // ── Source tags ──
+  builtinTag: 'Built-in',
+  thirdPartyTag: 'Third-party',
 } satisfies Record<PluginInventoryLocaleKey, string>
