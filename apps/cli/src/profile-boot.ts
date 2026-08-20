@@ -26,6 +26,7 @@ import {
   loadOverlayPatches,
   loadProfile,
   PROFILE_PATCH_FILENAME,
+  USER_PATCH_LAYER_PATHS,
   watchUserPatches,
   type Profile,
 } from '@deepseek-ai/dsh-app-boot'
@@ -250,6 +251,14 @@ export async function runProfile(options: RunProfileOptions): Promise<{ ctx: Con
     // Before any config-tree entry mounts, so plugins resolve all launch-time
     // environment values from the same immutable provenance snapshot.
     hostCtx.provide(DSH_LAUNCH_ENVIRONMENT_KEY, options.environment)
+    // Writable user patch layer paths so the plugin inventory persists
+    // enable/disable changes to the profile's own cordis.patch.yml rather
+    // than to the empty base root file, which the launcher rewrites on every
+    // boot to avoid bundle-insert duplication.
+    hostCtx.provide(USER_PATCH_LAYER_PATHS, {
+      profile: composed.profile.patchPath,
+      home: homePatchPath(),
+    })
     // The command line and bounded exit request are launcher facts available
     // to every app plugin that injects the argument snapshot.
     provideCmdline(hostCtx, {

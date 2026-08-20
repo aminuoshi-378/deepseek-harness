@@ -21,10 +21,23 @@ import type {} from '@deepseek-ai/cordis-plugin-hmr'
 // Side-effect type import: resolves `ctx.get('systemPrompt')` to the service.
 import type {} from '@deepseek-ai/dsh-system-prompt'
 
+/** Absolute paths of the writable user patch layers. */
+export interface UserPatchLayerPaths {
+  /** Profile-level patch file (`$DSH_HOME/profiles/<name>/cordis.patch.yml`). */
+  profile: string
+  /** Home-level patch file (`$DSH_HOME/cordis.patch.yml`), applies to every profile. */
+  home: string
+}
+
+/** Context service key for {@link UserPatchLayerPaths}. */
+export const USER_PATCH_LAYER_PATHS = 'userPatchLayerPaths' as const
+
 declare module '@deepseek-ai/cordis' {
   interface Context {
     /** Harness-home path resolver available to Loader `!!js` config expressions. */
     dshHomePath?: typeof dshHomePath
+    /** Writable user patch layer paths. Provided by the profile launcher. */
+    [USER_PATCH_LAYER_PATHS]?: UserPatchLayerPaths
   }
 }
 
