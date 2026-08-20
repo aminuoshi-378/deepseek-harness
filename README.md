@@ -24,26 +24,47 @@ The command starts the Web UI at `http://127.0.0.1:3080` by default and opens it
 
 ### Run from source
 
-To run from a repository checkout:
+Prerequisites: [Node.js](https://nodejs.org) >= 22.19 (or >= 24) and [pnpm](https://pnpm.io) >= 9.
+
+#### 1. Clone & install
 
 ```sh
 git clone https://github.com/deepseek-ai/deepseek-harness.git
 cd deepseek-harness
 pnpm install
 pnpm run build
-pnpm dsh web
 ```
 
 `pnpm run build` prepares the repository artifacts. `pnpm dsh web` uses those built artifacts without rebuilding.
 
-To register a global `dsh` command from source (instead of `pnpm dsh`):
+#### 2. Run
+
+```sh
+pnpm dsh web
+```
+
+#### 3. Register a global `dsh` command (optional)
+
+To use `dsh` from any directory instead of `pnpm dsh`:
+
+**macOS / Linux:**
 
 ```sh
 # Option A: npm link (recommended)
 npm link apps/cli
 
 # Option B: manual symlink
-ln -sf "$(pwd)/apps/cli/lib/bin.js" /usr/local/bin/dsh
+sudo ln -sf "$(pwd)/apps/cli/lib/bin.js" /usr/local/bin/dsh
+```
+
+**Windows (PowerShell, run as Administrator):**
+
+```powershell
+# Option A: npm link (recommended)
+npm link apps/cli
+
+# Option B: manual symlink (requires Developer Mode or admin privileges)
+New-Item -ItemType SymbolicLink -Path "$env:LOCALAPPDATA\Microsoft\WindowsApps\dsh.cmd" -Target "$PWD\apps\cli\lib\bin.js"
 ```
 
 After linking, `dsh web` works from any directory. Re-running `pnpm run build` updates the linked binary automatically.

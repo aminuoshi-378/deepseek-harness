@@ -24,26 +24,47 @@ npx @deepseek-ai/dsh web
 
 ### 从源码运行
 
-如需从仓库源码运行：
+前置条件：[Node.js](https://nodejs.org) >= 22.19（或 >= 24）和 [pnpm](https://pnpm.io) >= 9。
+
+#### 1. 克隆并安装
 
 ```sh
 git clone https://github.com/deepseek-ai/deepseek-harness.git
 cd deepseek-harness
 pnpm install
 pnpm run build
-pnpm dsh web
 ```
 
 `pnpm run build` 会准备仓库产物。`pnpm dsh web` 会直接使用这些已构建产物，不会重新构建。
 
-如需从源码注册全局 `dsh` 命令（替代 `pnpm dsh`）：
+#### 2. 运行
+
+```sh
+pnpm dsh web
+```
+
+#### 3. 注册全局 `dsh` 命令（可选）
+
+如需在任意目录直接使用 `dsh` 命令（替代 `pnpm dsh`）：
+
+**macOS / Linux：**
 
 ```sh
 # 方式 A：npm link（推荐）
 npm link apps/cli
 
 # 方式 B：手动软链接
-ln -sf "$(pwd)/apps/cli/lib/bin.js" /usr/local/bin/dsh
+sudo ln -sf "$(pwd)/apps/cli/lib/bin.js" /usr/local/bin/dsh
+```
+
+**Windows（PowerShell，需以管理员身份运行）：**
+
+```powershell
+# 方式 A：npm link（推荐）
+npm link apps/cli
+
+# 方式 B：手动软链接（需开发者模式或管理员权限）
+New-Item -ItemType SymbolicLink -Path "$env:LOCALAPPDATA\Microsoft\WindowsApps\dsh.cmd" -Target "$PWD\apps\cli\lib\bin.js"
 ```
 
 链接后即可在任意目录直接使用 `dsh web`。重新 `pnpm run build` 后链接自动指向最新产物。
