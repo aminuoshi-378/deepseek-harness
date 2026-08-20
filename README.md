@@ -36,6 +36,18 @@ pnpm dsh web
 
 `pnpm run build` prepares the repository artifacts. `pnpm dsh web` uses those built artifacts without rebuilding.
 
+To register a global `dsh` command from source (instead of `pnpm dsh`):
+
+```sh
+# Option A: npm link (recommended)
+npm link apps/cli
+
+# Option B: manual symlink
+ln -sf "$(pwd)/apps/cli/lib/bin.js" /usr/local/bin/dsh
+```
+
+After linking, `dsh web` works from any directory. Re-running `pnpm run build` updates the linked binary automatically.
+
 ## Community and support
 
 - Feel free to submit feedback or bug reports through [GitHub Discussions](https://github.com/deepseek-ai/deepseek-harness/discussions).

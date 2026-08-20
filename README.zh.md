@@ -36,6 +36,18 @@ pnpm dsh web
 
 `pnpm run build` 会准备仓库产物。`pnpm dsh web` 会直接使用这些已构建产物，不会重新构建。
 
+如需从源码注册全局 `dsh` 命令（替代 `pnpm dsh`）：
+
+```sh
+# 方式 A：npm link（推荐）
+npm link apps/cli
+
+# 方式 B：手动软链接
+ln -sf "$(pwd)/apps/cli/lib/bin.js" /usr/local/bin/dsh
+```
+
+链接后即可在任意目录直接使用 `dsh web`。重新 `pnpm run build` 后链接自动指向最新产物。
+
 ## 社区与支持
 
 - 欢迎通过 [GitHub Discussions](https://github.com/deepseek-ai/deepseek-harness/discussions) 提交反馈或 bug 报告。
