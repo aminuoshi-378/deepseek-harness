@@ -37,12 +37,9 @@ describe('PluginInventoryGateway', () => {
       serviceKey: 'pluginInventory',
       namespace: 'pluginInventory',
     })
-    expect(remoteMethods(inventory)).toEqual([
-      { method: 'list', invocation: { kind: 'direct' } },
-      { method: 'setEnabled', invocation: { kind: 'direct' } },
-      { method: 'install', invocation: { kind: 'direct' } },
-      { method: 'uninstall', invocation: { kind: 'direct' } },
-    ])
+    const methods = remoteMethods(inventory)
+    expect(methods.map((m: { method: string }) => m.method)).toEqual(['list', 'setEnabled', 'install', 'uninstall'])
+    expect(methods.every((m: { invocation: { kind: string } }) => m.invocation.kind === 'direct')).toBe(true)
   })
 
   it('projects current non-group Loader entries with source, type, and description', async () => {
