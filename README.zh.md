@@ -29,7 +29,7 @@ npx @deepseek-ai/dsh web
 #### 1. 克隆并安装
 
 ```sh
-git clone https://github.com/deepseek-ai/deepseek-harness.git
+git clone https://github.com/aminuoshi-378/deepseek-harness.git
 cd deepseek-harness
 pnpm install
 pnpm run build

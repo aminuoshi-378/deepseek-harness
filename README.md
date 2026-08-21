@@ -29,7 +29,7 @@ Prerequisites: [Node.js](https://nodejs.org) >= 22.19 (or >= 24) and [pnpm](http
 #### 1. Clone & install
 
 ```sh
-git clone https://github.com/deepseek-ai/deepseek-harness.git
+git clone https://github.com/aminuoshi-378/deepseek-harness.git
 cd deepseek-harness
 pnpm install
 pnpm run build
