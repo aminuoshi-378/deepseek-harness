@@ -19,8 +19,9 @@ import clsx from 'clsx'
 import type { ModelReasoningEffort, ModelSelection } from '@deepseek-ai/dsh-api-remotes/client'
 import {
   IconCheckOutline16, IconChevronDownOutline14, IconChevronRightOutline14,
-  IconWarningOutline16, Toast,
+  IconWarningOutline16, Menu, Toast,
 } from '@deepseek-ai/dsh-client-ui-primitives'
+import type { MenuEntry } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ModelSelectInjected } from './slots.ts'
 import css from './ModelSelect.module.css'
@@ -55,6 +56,7 @@ export function ModelSelect(
   // Model pane search: provider filter + free-text model name search.
   const [searchQuery, setSearchQuery] = useState('')
   const [providerFilter, setProviderFilter] = useState<string | null>(null)
+  const [providerMenuOpen, setProviderMenuOpen] = useState(false)
   // The in-menu error strip serves catalog loads (its Retry re-runs the
   // load); a rejected SELECTION announces through the transient toast
   // instead, so the strip renders only while the latest failure-capable
@@ -314,17 +316,34 @@ export function ModelSelect(
                     onChange={(e) => { setSearchQuery(e.target.value) }}
                     onKeyDown={(e) => { e.stopPropagation() }}
                   />
-                  <select
-                    className={css.providerSelect}
-                    value={providerFilter ?? ''}
-                    onChange={(e) => { setProviderFilter(e.target.value === '' ? null : e.target.value) }}
-                    onKeyDown={(e) => { e.stopPropagation() }}
-                  >
-                    <option value="">{t('filter.allProviders')}</option>
-                    {state.groups.map(group => (
-                      <option key={group.id} value={group.id}>{group.name}</option>
-                    ))}
-                  </select>
+                  <Menu
+                    open={providerMenuOpen}
+                    align="end"
+                    side="bottom"
+                    items={[
+                      { id: '', label: t('filter.allProviders') },
+                      ...state.groups.map(group => ({ id: group.id, label: group.name })),
+                    ] as MenuEntry[]}
+                    selectedId={providerFilter ?? ''}
+                    onSelect={(id) => { setProviderFilter(id === '' ? null : id); setProviderMenuOpen(false) }}
+                    onClose={() => { setProviderMenuOpen(false) }}
+                    anchor={
+                      <button
+                        type="button"
+                        className={css.providerSelect}
+                        onClick={() => { setProviderMenuOpen(v => !v) }}
+                      >
+                        <span className={css.providerSelectLabel}>
+                          {providerFilter === null
+                            ? t('filter.allProviders')
+                            : state.groups.find(g => g.id === providerFilter)?.name ?? providerFilter}
+                        </span>
+                        <span className={clsx(css.chevron, providerMenuOpen && css.chevronOpen)} aria-hidden>
+                          <IconChevronDownOutline14 />
+                        </span>
+                      </button>
+                    }
+                  />
                 </div>
               )}
               <div className={clsx(css.groups, 'scrollable')}>

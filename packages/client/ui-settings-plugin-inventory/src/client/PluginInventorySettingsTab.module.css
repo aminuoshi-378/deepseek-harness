@@ -101,22 +101,49 @@
   padding-left: 2px;
 }
 
-.filter select {
+/* Chip-style trigger for the source/type Menu, matching PermissionSelect:
+   transparent background, rounded chrome, secondary label. */
+.filterSelect {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   height: 32px;
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
-  padding: 0 8px;
+  padding: 0 4px 0 8px;
+  border: none;
+  border-radius: 24px;
   outline: none;
-  background: var(--dsw-alias-bg-layer-1);
-  color: var(--dsw-alias-label-primary);
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
   font: inherit;
   font-size: 13px;
   cursor: pointer;
+  white-space: nowrap;
 }
 
-.filter select:focus-visible {
-  border-color: var(--dsw-alias-state-business-primary);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--dsw-alias-state-business-primary) 18%, transparent);
+.filterSelect:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.filterSelect:focus-visible {
+  box-shadow: 0 0 0 2px var(--dsw-alias-border-l3);
+}
+
+.filterSelectLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.filterSelectChevron {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--dsw-alias-label-caption);
+  transition: transform 120ms ease;
+}
+
+.filterSelectChevronOpen {
+  transform: rotate(180deg);
 }
 
 /* ── Batch toolbar ── */

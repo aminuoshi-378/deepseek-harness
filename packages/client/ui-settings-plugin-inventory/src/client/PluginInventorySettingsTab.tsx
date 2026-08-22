@@ -8,7 +8,9 @@ import type {
 import {
   IconChevronDownOutline14,
   IconSearchOutline16,
+  Menu,
 } from '@deepseek-ai/dsh-client-ui-primitives'
+import type { MenuEntry } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { PluginInventoryLocaleKey } from './locales.ts'
 import css from './PluginInventorySettingsTab.module.css'
@@ -88,6 +90,8 @@ export function PluginInventorySettingsTab({ list, setEnabled, uninstall, instal
   const [expanded, setExpanded] = useState<PluginInventoryEntry['entryId'] | null>(null)
   const [sourceFilter, setSourceFilter] = useState<PluginEntrySource | 'all'>('all')
   const [typeFilter, setTypeFilter] = useState<PluginEntryType | 'all'>('all')
+  const [sourceMenuOpen, setSourceMenuOpen] = useState(false)
+  const [typeMenuOpen, setTypeMenuOpen] = useState(false)
   const [state, setState] = useState<ViewState>({ status: 'loading' })
   const [actionInProgress, setActionInProgress] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
@@ -274,28 +278,64 @@ export function PluginInventorySettingsTab({ list, setEnabled, uninstall, instal
           <div className={css.filters}>
             <label className={css.filter}>
               <span>{t('source')}</span>
-              <select
-                value={sourceFilter}
-                onChange={(e) => { setSourceFilter(e.target.value as PluginEntrySource | 'all'); setTypeFilter('all') }}
-                aria-label={t('source')}
-              >
-                <option value="all">{t('sourceAll')}</option>
-                <option value="builtin">{t('sourceBuiltin')}</option>
-                <option value="third-party">{t('sourceThirdParty')}</option>
-              </select>
+              <Menu
+                open={sourceMenuOpen}
+                align="start"
+                side="bottom"
+                items={[
+                  { id: 'all', label: t('sourceAll') },
+                  { id: 'builtin', label: t('sourceBuiltin') },
+                  { id: 'third-party', label: t('sourceThirdParty') },
+                ] as MenuEntry[]}
+                selectedId={sourceFilter}
+                onSelect={(id) => { setSourceFilter(id as PluginEntrySource | 'all'); setTypeFilter('all'); setSourceMenuOpen(false) }}
+                onClose={() => { setSourceMenuOpen(false) }}
+                anchor={
+                  <button
+                    type="button"
+                    className={css.filterSelect}
+                    onClick={() => { setSourceMenuOpen(v => !v) }}
+                  >
+                    <span className={css.filterSelectLabel}>
+                      {sourceFilter === 'all' ? t('sourceAll')
+                        : sourceFilter === 'builtin' ? t('sourceBuiltin')
+                          : t('sourceThirdParty')}
+                    </span>
+                    <span className={`${css.filterSelectChevron}${sourceMenuOpen ? ` ${css.filterSelectChevronOpen}` : ''}`} aria-hidden>
+                      <IconChevronDownOutline14 />
+                    </span>
+                  </button>
+                }
+              />
             </label>
             <label className={css.filter}>
               <span>{t('type')}</span>
-              <select
-                value={typeFilter}
-                onChange={(e) => { setTypeFilter(e.target.value as PluginEntryType | 'all') }}
-                aria-label={t('type')}
-              >
-                <option value="all">{t('typeAll')}</option>
-                {availableTypes.map(type => (
-                  <option key={type} value={type}>{type}</option>
-                ))}
-              </select>
+              <Menu
+                open={typeMenuOpen}
+                align="start"
+                side="bottom"
+                items={[
+                  { id: 'all', label: t('typeAll') },
+                  ...availableTypes.map(type => ({ id: type, label: type })),
+                ] as MenuEntry[]}
+                selectedId={typeFilter}
+                onSelect={(id) => { setTypeFilter(id as PluginEntryType | 'all'); setTypeMenuOpen(false) }}
+                onClose={() => { setTypeMenuOpen(false) }}
+                anchor={
+                  <button
+                    type="button"
+                    className={css.filterSelect}
+                    onClick={() => { setTypeMenuOpen(v => !v) }}
+                  >
+                    <span className={css.filterSelectLabel}>
+                      {typeFilter === 'all' ? t('typeAll') : typeFilter}
+                    </span>
+                    <span className={`${css.filterSelectChevron}${typeMenuOpen ? ` ${css.filterSelectChevronOpen}` : ''}`} aria-hidden>
+                      <IconChevronDownOutline14 />
+                    </span>
+                  </button>
+                }
+              />
             </label>
             <button
               type="button"
