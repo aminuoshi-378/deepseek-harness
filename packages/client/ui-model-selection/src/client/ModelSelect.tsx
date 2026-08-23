@@ -57,6 +57,8 @@ export function ModelSelect(
   const [searchQuery, setSearchQuery] = useState('')
   const [providerFilter, setProviderFilter] = useState<string | null>(null)
   const [providerMenuOpen, setProviderMenuOpen] = useState(false)
+  const providerMenuOpenRef = useRef(false)
+  useEffect(() => { providerMenuOpenRef.current = providerMenuOpen }, [providerMenuOpen])
   // The in-menu error strip serves catalog loads (its Retry re-runs the
   // load); a rejected SELECTION announces through the transient toast
   // instead, so the strip renders only while the latest failure-capable
@@ -121,6 +123,18 @@ export function ModelSelect(
       .filter(group => group.models.length > 0)
   }, [state.groups, providerFilter, searchQuery])
 
+  // True when a node lives on the portaled provider dropdown (rendered at
+  // document.body, i.e. outside rootRef). The ModelSelect panel itself is
+  // also a [role="menu"], but it sits inside rootRef, so the containing check
+  // below distinguishes the two. Guarded by the ref so the check never reads
+  // a stale listener closure.
+  const insideProviderList = (node: Node): boolean => {
+    if (!providerMenuOpenRef.current) return false
+    if (!(node instanceof Element)) return false
+    const menu = node.closest('[role="menu"]')
+    return menu !== null && rootRef.current?.contains(menu) === false
+  }
+
   const reload = (): void => {
     lastActionRef.current = 'load'
     load()
@@ -136,11 +150,20 @@ export function ModelSelect(
 
   useEffect(() => {
     if (!open) return
-    const closeOutside = (event: MouseEvent): void => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
+    const closeOutside = (event: PointerEvent): void => {
+      const target = event.target as Node
+      // Self-tree: rootRef wraps the trigger and the in-place menu card.
+      if (rootRef.current?.contains(target) === true) return
+      // While the provider dropdown is open, the portaled list lives outside
+      // rootRef and clicks inside it should not close the parent panel.
+      // Use ref (not state) so the check never sees a stale listener closure.
+      if (insideProviderList(target)) return
+      setOpen(false)
     }
-    document.addEventListener('mousedown', closeOutside)
-    return () => { document.removeEventListener('mousedown', closeOutside) }
+    // pointerdown capture fires BEFORE the Menu's bubble-phase pointerdown
+    // handler, so the portaled list is still mounted when we check.
+    document.addEventListener('pointerdown', closeOutside, true)
+    return () => { document.removeEventListener('pointerdown', closeOutside, true) }
   }, [open])
 
   if (!available) return null
@@ -185,7 +208,15 @@ export function ModelSelect(
   }
 
   const onBlur = (event: FocusEvent<HTMLDivElement>): void => {
-    if (event.relatedTarget instanceof Node && rootRef.current?.contains(event.relatedTarget)) return
+    // Focus leaving the panel is fine, except when it lands on the portaled
+    // provider dropdown. Its relatedTarget sits outside rootRef, so without
+    // this guard a pointer selection of a provider would blur-close the whole
+    // model-selection panel. Closing only happens for the provider Menu's own
+    // onClose (outside click / Escape), which runs after selection completes.
+    if (event.relatedTarget instanceof Node) {
+      if (rootRef.current?.contains(event.relatedTarget)) return
+      if (insideProviderList(event.relatedTarget)) return
+    }
     close()
   }
 
@@ -320,6 +351,7 @@ export function ModelSelect(
                     open={providerMenuOpen}
                     align="end"
                     side="bottom"
+                    portal
                     items={[
                       { id: '', label: t('filter.allProviders') },
                       ...state.groups.map(group => ({ id: group.id, label: group.name })),
