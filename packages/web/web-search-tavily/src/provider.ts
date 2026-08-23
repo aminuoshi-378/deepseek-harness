@@ -36,8 +36,10 @@ const USER_AGENT = 'deepseek-harness/0.0.1'
 
 /** Resolved provider options (the plugin's `apply` supplies env-var and constant defaults). */
 export interface TavilySearchProviderOptions {
-  /** Tavily API key. Empty/absent makes the provider unavailable. */
-  apiKey: string
+  /** Literal Tavily API key; when present it wins over {@link resolveApiKey}. */
+  apiKey?: string
+  /** Async credential source used when {@link apiKey} is absent. */
+  resolveApiKey?: () => Promise<string | undefined>
   /** Endpoint base; `/search` is appended. */
   baseURL: string
   /** Default result count sent to Tavily. */
@@ -89,28 +91,32 @@ export function mapTavilyResponse(response: TavilySearchResponse): WebSearchResu
 export class TavilySearchProvider implements WebSearchProvider {
   readonly id = TAVILY_PROVIDER_ID
 
-  constructor(private readonly options: TavilySearchProviderOptions) {}
+  /** @param resolveOptions - projects the options this search serves. */
+  constructor(private readonly resolveOptions: () => TavilySearchProviderOptions) {}
 
   available(): boolean {
-    return this.options.apiKey.length > 0
-      && isValidBaseUrl(this.options.baseURL)
-      && isPositiveInteger(this.options.maxResults)
+    const options = this.resolveOptions()
+    return ((options.apiKey?.length ?? 0) > 0 || options.resolveApiKey !== undefined)
+      && isValidBaseUrl(options.baseURL)
+      && isPositiveInteger(options.maxResults)
   }
 
   async search(request: WebSearchRequest, signal?: AbortSignal): Promise<WebSearchResult> {
+    const options = this.resolveOptions()
+    const apiKey = options.apiKey?.length ? options.apiKey : await options.resolveApiKey?.()
     // A per-request bound wins over the configured default.
     const searchRequest: TavilySearchRequest = {
       query: request.query,
-      maxResults: request.maxResults ?? this.options.maxResults,
-      searchDepth: this.options.searchDepth,
+      maxResults: request.maxResults ?? options.maxResults,
+      searchDepth: options.searchDepth,
     }
     let response: Response
     try {
-      response = await fetch(`${this.options.baseURL}/search`, {
+      response = await fetch(searchEndpoint(options.baseURL), {
         method: 'POST',
         redirect: 'error',
         headers: {
-          'authorization': `Bearer ${this.options.apiKey}`,
+          'authorization': apiKey === undefined ? '' : `Bearer ${apiKey}`,
           'content-type': 'application/json',
           'accept': 'application/json',
           'user-agent': USER_AGENT,
@@ -153,6 +159,21 @@ export class TavilySearchProvider implements WebSearchProvider {
 /** True when `baseURL` parses as an absolute URL (a cheap local config check). */
 function isValidBaseUrl(baseURL: string): boolean {
   return URL.canParse(baseURL)
+}
+
+/**
+ * Build the `POST /search` endpoint from a configured base. The base may omit
+ * the operation entirely (`https://api.tavily.com`), carry a trailing slash,
+ * or already name the full `/search` path — each resolves to the same endpoint
+ * so a user who pastes the full path does not double-append `search`.
+ * @param baseURL - the configured provider base.
+ * @returns the full search endpoint.
+ */
+function searchEndpoint(baseURL: string): string {
+  const trimmed = baseURL.replace(/\/+$/, '')
+  return trimmed.toLowerCase().endsWith('/search')
+    ? trimmed
+    : `${trimmed}/search`
 }
 
 /** True for a result count that can be sent to Tavily (a positive whole number). */

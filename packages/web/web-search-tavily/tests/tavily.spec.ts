@@ -58,20 +58,20 @@ describe('Tavily result mapping', () => {
 
 describe('TavilySearchProvider availability', () => {
   it('is unavailable without a key', () => {
-    expect(new TavilySearchProvider({ ...options, apiKey: '' }).available()).toBe(false)
+    expect(new TavilySearchProvider(() => ({ ...options, apiKey: '' })).available()).toBe(false)
   })
 
   it('is available with a key and valid config', () => {
-    expect(new TavilySearchProvider(options).available()).toBe(true)
+    expect(new TavilySearchProvider(() => options).available()).toBe(true)
   })
 
   it('is misconfigured when the base URL is unparseable', () => {
-    expect(new TavilySearchProvider({ ...options, baseURL: 'not a url' }).available()).toBe(false)
+    expect(new TavilySearchProvider(() => ({ ...options, baseURL: 'not a url' })).available()).toBe(false)
   })
 
   it('is misconfigured when maxResults is not a positive integer', () => {
-    expect(new TavilySearchProvider({ ...options, maxResults: 0 }).available()).toBe(false)
-    expect(new TavilySearchProvider({ ...options, maxResults: 1.5 }).available()).toBe(false)
+    expect(new TavilySearchProvider(() => ({ ...options, maxResults: 0 })).available()).toBe(false)
+    expect(new TavilySearchProvider(() => ({ ...options, maxResults: 1.5 })).available()).toBe(false)
   })
 })
 
@@ -80,7 +80,7 @@ describe('TavilySearchProvider request mapping', () => {
     const fetchMock = vi.fn(async () => jsonResponse({ results: [] }))
     vi.stubGlobal('fetch', fetchMock)
 
-    const provider = new TavilySearchProvider({ ...options, searchDepth: 'advanced' })
+    const provider = new TavilySearchProvider(() => ({ ...options, searchDepth: 'advanced' }))
     await provider.search({ query: 'hello', maxResults: 8 })
 
     expect(fetchMock).toHaveBeenCalledOnce()
@@ -91,10 +91,29 @@ describe('TavilySearchProvider request mapping', () => {
     expect(JSON.parse(init.body as string)).toEqual({ query: 'hello', maxResults: 8, searchDepth: 'advanced' })
   })
 
+  it('builds /search from a base that omits it, carries a slash, or already names it', async () => {
+    const calls: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      calls.push(String(input))
+      return jsonResponse({ results: [] })
+    }))
+    const bare = new TavilySearchProvider(() => ({ ...options, baseURL: 'https://tavily.bare' }))
+    const slash = new TavilySearchProvider(() => ({ ...options, baseURL: 'https://tavily.slash/' }))
+    const full = new TavilySearchProvider(() => ({ ...options, baseURL: 'https://tavily.full/search' }))
+    await bare.search({ query: 'q' })
+    await slash.search({ query: 'q' })
+    await full.search({ query: 'q' })
+    expect(calls).toEqual([
+      'https://tavily.bare/search',
+      'https://tavily.slash/search',
+      'https://tavily.full/search',
+    ])
+  })
+
   it('falls back to the configured maxResults and depth when a request omits them', async () => {
     const fetchMock = vi.fn(async () => jsonResponse({ results: [] }))
     vi.stubGlobal('fetch', fetchMock)
-    await new TavilySearchProvider(options).search({ query: 'q' })
+    await new TavilySearchProvider(() => options).search({ query: 'q' })
     const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
     expect(JSON.parse(init.body as string)).toMatchObject({ maxResults: 5, searchDepth: 'basic' })
   })
@@ -103,7 +122,7 @@ describe('TavilySearchProvider request mapping', () => {
     const fetchMock = vi.fn(async () => jsonResponse({ results: [] }))
     vi.stubGlobal('fetch', fetchMock)
     const controller = new AbortController()
-    await new TavilySearchProvider(options).search({ query: 'q' }, controller.signal)
+    await new TavilySearchProvider(() => options).search({ query: 'q' }, controller.signal)
     const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
     expect(init.signal).toBe(controller.signal)
   })
@@ -112,31 +131,31 @@ describe('TavilySearchProvider request mapping', () => {
 describe('TavilySearchProvider error handling', () => {
   it('maps an HTTP error to WEB_PROVIDER_ERROR with the provider message', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ message: 'bad key' }, { status: 401 })))
-    await expect(new TavilySearchProvider(options).search({ query: 'q' }))
+    await expect(new TavilySearchProvider(() => options).search({ query: 'q' }))
       .rejects.toThrow(expect.objectContaining({ code: 'WEB_PROVIDER_ERROR', message: 'bad key' }))
   })
 
   it('reads a legacy error detail field when message is absent', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ error: 'quota exceeded' }, { status: 429 })))
-    await expect(new TavilySearchProvider(options).search({ query: 'q' }))
+    await expect(new TavilySearchProvider(() => options).search({ query: 'q' }))
       .rejects.toThrow(expect.objectContaining({ code: 'WEB_PROVIDER_ERROR', message: 'quota exceeded' }))
   })
 
   it('keeps a status-line message when the error body is not JSON', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('gateway down', { status: 502 })))
-    await expect(new TavilySearchProvider(options).search({ query: 'q' }))
+    await expect(new TavilySearchProvider(() => options).search({ query: 'q' }))
       .rejects.toThrow(expect.objectContaining({ code: 'WEB_PROVIDER_ERROR', message: 'Tavily API error (HTTP 502)' }))
   })
 
   it('maps a network failure to WEB_PROVIDER_ERROR', async () => {
     vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new TypeError('connection refused'))))
-    await expect(new TavilySearchProvider(options).search({ query: 'q' }))
+    await expect(new TavilySearchProvider(() => options).search({ query: 'q' }))
       .rejects.toThrow(expect.objectContaining({ code: 'WEB_PROVIDER_ERROR' }))
   })
 
   it('maps an abort to WEB_ABORTED', async () => {
     vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new DOMException('aborted', 'AbortError'))))
-    await expect(new TavilySearchProvider(options).search({ query: 'q' }))
+    await expect(new TavilySearchProvider(() => options).search({ query: 'q' }))
       .rejects.toThrow(expect.objectContaining({ code: 'WEB_ABORTED' }))
   })
 })
@@ -188,15 +207,19 @@ describe('web-search-tavily plugin registration', () => {
     }
   })
 
-  it('is unavailable when neither config nor env supplies a key', async () => {
+  it('stays available when no key is configured, failing at request time instead', async () => {
     const prev = process.env.TAVILY_API_KEY
     delete process.env.TAVILY_API_KEY
     try {
+      vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ message: 'missing key' }, { status: 401 })))
       const ctx = new Context()
       await ctx.plugin(WebRuntime, { searchProvider: TAVILY_PROVIDER_ID })
       await ctx.plugin(tavilyPlugin, {})
+      // A keyless run still resolves options (the provider is open-ended about
+      // a key source at `available()`), so the request reaches the API and
+      // surfaces the HTTP refusal — matching the deepseek provider's seam.
       await expect(ctx.web.search({ query: 'q' }))
-        .rejects.toThrow(expect.objectContaining({ code: 'WEB_PROVIDER_CONFIGURED_UNAVAILABLE' }))
+        .rejects.toThrow(expect.objectContaining({ code: 'WEB_PROVIDER_ERROR' }))
     } finally {
       if (prev !== undefined) process.env.TAVILY_API_KEY = prev
     }
