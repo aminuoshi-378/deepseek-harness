@@ -404,12 +404,21 @@
     - id: web
       name: '@deepseek-ai/dsh-web'
       config:
-        searchProvider: deepseek-official
+        # Primary search route. Override in a user/settings layer or the
+        # $DSH_WEB_SEARCH_PROVIDER env seam to pick another provider.
+        searchProvider: tavily
 
     - id: web-search-deepseek
       name: '@deepseek-ai/dsh-web-search-deepseek'
       config:
         apiKeyEnv: DEEPSEEK_API_KEY
+
+    # Tavily-backed search route. Reads the key from $TAVILY_API_KEY (or a
+    # config override); without a key the provider is unavailable and the seam
+    # reports WEB_PROVIDER_CONFIGURED_UNAVAILABLE rather than silently falling
+    # back, so an intended Tavily search fails loud when misconfigured.
+    - id: web-search-tavily
+      name: '@deepseek-ai/dsh-web-search-tavily'
 
     - id: tool-web
       name: '@deepseek-ai/dsh-tool-web'
