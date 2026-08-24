@@ -75,7 +75,16 @@ class ExperienceStore {
   private db: DatabaseType
 
   constructor(dbPath: string = ':memory:') {
-    this.db = new Database(dbPath)
+    // Expand ~ to home directory
+    const resolvedPath = dbPath.startsWith('~/')
+      ? dbPath.replace('~/', `${process.env.HOME}/`)
+      : dbPath
+    // Ensure parent dir exists for file-based db
+    if (resolvedPath !== ':memory:') {
+      const dir = resolvedPath.replace(/\/[^/]+$/, '')
+      try { require('node:fs').mkdirSync(dir, { recursive: true }) } catch {}
+    }
+    this.db = new Database(resolvedPath)
     this.db.pragma('journal_mode = WAL')
     this.initSchema()
   }
@@ -220,56 +229,141 @@ class ExperienceStore {
 
 const PLUGIN_SOURCE: MessageSource = { kind: 'plugin', plugin: 'self-improving' }
 
+/** Simple stderr logger — works in headless and web mode, visible on console */
+function log(msg: string, data?: unknown): void {
+  if (data !== undefined) {
+    process.stderr.write(`[self-improving] ${msg} ${JSON.stringify(data)}\n`)
+  } else {
+    process.stderr.write(`[self-improving] ${msg}\n`)
+  }
+}
+
 export function apply(ctx: Context, config: Config): void {
   const store = new ExperienceStore(config.dbPath)
 
+  log('plugin loaded', { dbPath: config.dbPath, metaCognition: config.metaCognitionEnabled, behaviorAdapter: config.behaviorAdapterEnabled })
+
   // Per-agent turn tracking: collect tool results during a turn
-  const turnTools = new Map<string, { tools: { name: string; success: boolean }[]; sessionId: string }>()
+  // Key: agent.id only (accumulate all tools across steps within a turn)
+  const agentTools = new Map<string, { tools: { name: string; success: boolean }[]; sessionId: string }>()
 
   // --- Layer 1: Observe tool outcomes via tools/result ---
   ctx.on('tools/result', (exec: Readonly<ToolExecution>, result: Readonly<ToolExecutionResult>) => {
     const agent = exec.agent
     if (!agent) return
 
-    // Use the agent's current turn number from session
-    const turn = agent.session.turn ?? 0
-    const turnKey = `${agent.id}:${turn}`
-    if (!turnTools.has(turnKey)) {
-      turnTools.set(turnKey, { tools: [], sessionId: agent.id })
+    if (!agentTools.has(agent.id)) {
+      agentTools.set(agent.id, { tools: [], sessionId: agent.id })
     }
-    const entry = turnTools.get(turnKey)!
-
-    entry.tools.push({
+    agentTools.get(agent.id)!.tools.push({
       name: exec.name,
       success: !result.isError,
     })
+
+    log(`tool/result — ${exec.name} ${result.isError ? 'FAIL' : 'OK'}`)
   })
 
   // --- Layer 1 + 4: On turn-stopping, score the turn and store it ---
   ctx.on('agent/turn-stopping', async (payload: { agent: Agent; turn: number; signal: AbortSignal }) => {
+    log(`agent/turn-stopping fired — turn=${payload.turn}`)
     const { agent, turn } = payload
-    const turnKey = `${agent.id}:${turn}`
-    const entry = turnTools.get(turnKey)
+    const entry = agentTools.get(agent.id)
 
-    if (!entry || entry.tools.length === 0) return
+    if (!entry || entry.tools.length === 0) {
+      log(`turn-stopping: no tools tracked for agent ${agent.id}, skipping`)
+      return
+    }
 
     // Score the turn
     const toolCallCount = entry.tools.length
     const successCount = entry.tools.filter(t => t.success).length
     const toolSuccessRate = toolCallCount > 0 ? successCount / toolCallCount : 0
-    const guardCount = 0 // guards observed via separate mechanism
 
-    // Goal progress: assume advanced if tools succeeded, stalled if many failures
-    const goalProgress: 'advanced' | 'stalled' | 'regressed' | 'none' =
-      toolSuccessRate >= 0.5 ? 'advanced' : 'stalled'
+    // --- Goal progress: read from dsh goal service ---
+    // If the agent has a goal and its phase is 'complete', the turn advanced the goal.
+    // If 'blocked', the turn stalled. If 'active', goal is in progress (advanced).
+    // If no goal, fall back to tool success rate.
+    let goalProgress: 'advanced' | 'stalled' | 'regressed' | 'none' = 'none'
+    const goalService = ctx.get('goals')
+    if (goalService && typeof goalService.get === 'function') {
+      try {
+        const goal = goalService.get(agent)
+        if (goal) {
+          if (goal.phase === 'complete') goalProgress = 'advanced'
+          else if (goal.phase === 'blocked') goalProgress = 'stalled'
+          else if (goal.phase === 'active') goalProgress = 'advanced'
+          else if (goal.phase === 'paused') goalProgress = 'stalled'
+        }
+      } catch { /* goal service may not be available */ }
+    }
+    // Fallback if no goal service or no goal: use turn/end reason from session events
+    if (goalProgress === 'none') {
+      try {
+        const events = agent.session.events ?? []
+        const turnEndEvents = events.filter((e: any) => e.type === 'turn/end' && e.data?.turn === turn)
+        const lastTurnEnd = turnEndEvents[turnEndEvents.length - 1]
+        if (lastTurnEnd) {
+          const reason = lastTurnEnd.data?.reason
+          if (reason?.kind === 'completed') goalProgress = 'advanced'
+          else if (reason?.kind === 'error') goalProgress = 'regressed'
+          else if (reason?.kind === 'max-tokens') goalProgress = 'stalled'
+          else if (reason?.kind === 'blocked') goalProgress = 'stalled'
+          else if (reason?.kind === 'aborted') goalProgress = 'stalled'
+          else goalProgress = 'advanced' // unknown → assume advanced
+        } else {
+          goalProgress = toolSuccessRate >= 0.5 ? 'advanced' : 'stalled'
+        }
+      } catch {
+        goalProgress = toolSuccessRate >= 0.5 ? 'advanced' : 'stalled'
+      }
+    }
 
-    // Determine user feedback (simplified: no direct feedback API in this context)
-    const userFeedback = 'none'
+    // --- Guard triggers: scan session events for repeat-tool-reminder injections ---
+    // repeat-tool-reminder injects user/messages with source.plugin = 'repeat-tool-reminder'
+    let guardCount = 0
+    try {
+      const events = agent.session.events ?? []
+      guardCount = events.filter((e: any) =>
+        e.type === 'user/message' &&
+        e.data?.source?.plugin === 'repeat-tool-reminder',
+      ).length
+    } catch { /* session events not available */ }
+
+    // --- User feedback: read from message-feedback service ---
+    // message-feedback stores per-message positive/negative ratings in a sidecar
+    let userFeedback: 'positive' | 'negative' | 'none' = 'none'
+    const feedbackService = ctx.get('messageFeedback')
+    if (feedbackService && typeof feedbackService.list === 'function') {
+      try {
+        const result = await feedbackService.list({ sessionId: agent.session.id })
+        const items = (result as any)?.value?.items ?? (result as any)?.items ?? []
+        if (Array.isArray(items) && items.length > 0) {
+          const turnAssistantSeqs = new Set<number>()
+          // Find assistant messages from this turn
+          const events = agent.session.events ?? []
+          for (const e of events) {
+            if (e.type === 'assistant/message' && (e as any).data?.turn === turn) {
+              turnAssistantSeqs.add((e as any).seq)
+            }
+          }
+          // Check if any feedback targets messages from this turn
+          const turnFeedback = items.filter((item: any) =>
+            turnAssistantSeqs.has((item as any).messageSeq) ||
+            turnAssistantSeqs.has((item as any).messageId),
+          )
+          if (turnFeedback.length > 0) {
+            const hasNegative = turnFeedback.some((f: any) => f.rating === 'negative')
+            const hasPositive = turnFeedback.some((f: any) => f.rating === 'positive')
+            userFeedback = hasNegative ? 'negative' : (hasPositive ? 'positive' : 'none')
+          }
+        }
+      } catch { /* feedback service may not be available */ }
+    }
 
     // Compute outcome score using the same weights as our evaluator
-    const goalScore = goalProgress === 'advanced' ? 1.0 : goalProgress === 'stalled' ? 0.3 : 0.5
+    const goalScore = goalProgress === 'advanced' ? 1.0 : goalProgress === 'stalled' ? 0.3 : goalProgress === 'regressed' ? 0.0 : 0.5
     const guardPenalty = Math.min(guardCount * 0.1, 0.15)
-    const feedbackScore = 0.5
+    const feedbackScore = userFeedback === 'positive' ? 1.0 : userFeedback === 'negative' ? 0.0 : 0.5
     const outcomeScore = Math.max(0, Math.min(1,
       goalScore * 0.4 + toolSuccessRate * 0.25 + (0.15 - guardPenalty) + feedbackScore * 0.2,
     ))
@@ -284,6 +378,8 @@ export function apply(ctx: Context, config: Config): void {
       toolsUsed, actions, wsDigest,
     )
 
+    log(`turn ${turn} scored — score=${outcomeScore.toFixed(2)} | goal=${goalProgress} tools=${toolCallCount} successRate=${toolSuccessRate.toFixed(2)} guards=${guardCount} feedback=${userFeedback} | exp ${expId}`)
+
     // Queue reflection if enabled
     if (config.metaCognitionEnabled) {
       pendingReflections.push({
@@ -295,8 +391,8 @@ export function apply(ctx: Context, config: Config): void {
       })
     }
 
-    // Clean up turn tracking
-    turnTools.delete(turnKey)
+    // Clean up agent tool tracking for next turn
+    agentTools.delete(agent.id)
   })
 
   // --- Layer 2: Inject experience at agent/pre-step ---
@@ -305,6 +401,7 @@ export function apply(ctx: Context, config: Config): void {
       payload: { agent: Agent; messages: UserMessage[]; turn: number; step: number; signal: AbortSignal },
       next: () => Promise<any>,
     ) => {
+      log(`agent/pre-step fired — turn=${payload.turn} step=${payload.step}`)
       const { agent } = payload
 
       try {
@@ -319,6 +416,8 @@ export function apply(ctx: Context, config: Config): void {
           const sorted = [...records].sort((a, b) => b.outcomeScore - a.outcomeScore)
           const best = sorted[0]
           const worst = sorted[sorted.length - 1]
+
+          log(`injecting ${records.length} past experiences into pre-step (best score ${best.outcomeScore.toFixed(2)})`)
 
           const lines: string[] = ['## Past Experience (advisory)', '']
           if (best.outcomeScore >= 0.6) {
@@ -352,7 +451,7 @@ export function apply(ctx: Context, config: Config): void {
         return decision
       } catch (err) {
         // Never break the agent loop — delegate to next() on any error
-        ctx.logger?.warn?.('self-improving: pre-step injection error', err)
+        log(`pre-step injection error: ${(err as Error).message}`)
         return next()
       }
     })
@@ -393,6 +492,9 @@ export function apply(ctx: Context, config: Config): void {
 
   // Process reflections during maintenance (rule-based, no LLM)
   ctx.on('agent/run-maintenance', async () => {
+    if (pendingReflections.length > 0) {
+      log(`processing ${pendingReflections.length} pending reflections`)
+    }
     while (pendingReflections.length > 0) {
       const entry = pendingReflections.shift()!
 
@@ -407,6 +509,7 @@ export function apply(ctx: Context, config: Config): void {
       }
 
       store.updateLesson(entry.expId, lesson)
+      log(`lesson generated — ${lesson}`)
 
       // Boost confidence on similar past experiences if this was positive
       if (entry.outcomeScore >= 0.7) {
@@ -419,13 +522,10 @@ export function apply(ctx: Context, config: Config): void {
       }
     }
 
-    // Distill preferences
-    if (config.behaviorAdapterEnabled) {
-      const stats = store.stats()
-      if (stats.total >= 10) {
-        // Preferences are injected via the system prompt section above
-        // (the section's text provider reads stats dynamically)
-      }
+    // Distill preferences + log stats
+    const stats = store.stats()
+    if (stats.total > 0) {
+      log(`store stats — total=${stats.total} avgScore=${stats.avgScore.toFixed(2)} positive=${stats.positive} withLessons=${stats.withLessons}`)
     }
   })
 

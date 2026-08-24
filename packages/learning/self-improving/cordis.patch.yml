@@ -1,0 +1,10 @@
+# dsh-self-improving bundle patch
+# Mounts the self-improving learning layer plugin.
+- insert:
+    - id: self-improving
+      name: dsh-self-improving
+      config:
+        dbPath: '~/.dsh/experiences.db'
+        metaCognitionEnabled: true
+        behaviorAdapterEnabled: true
+        minInjectionScore: 0.3
