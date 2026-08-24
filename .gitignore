@@ -39,3 +39,7 @@ apps/web/dist/
 worktrees/
 .agents/worktrees/
 .typert-*/
+
+# local runtime artifacts (dsh profile init at repo root, workbuddy scratch)
+/.workbuddy/
+/profiles/

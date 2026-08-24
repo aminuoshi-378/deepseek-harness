@@ -1,14 +1,12 @@
 /** Projection of the current Cordis Loader plugin entries with management operations. */
 
-import { accessSync, constants, readdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
-import yaml from 'js-yaml'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import type { Context, FiberState } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/cordis-plugin-loader'
 import { TypertRemoteService, Remote } from '@deepseek-ai/dsh-typert-protocol'
-import { dshHomePath } from '@deepseek-ai/dsh-home-paths'
 // Typert-generated ./typert and ./remote artifacts import Zod at runtime.
 import type {} from 'zod'
+import * as yaml from 'js-yaml'
 import type {
   PluginEntryId,
   PluginEntrySource,
@@ -20,6 +18,15 @@ import type {
   PluginInventoryToggleResult,
   PluginInventoryUninstallResult,
 } from './types.ts'
+
+/** Context service key for the writable user patch layer paths. */
+const USER_PATCH_LAYER_PATHS = 'userPatchLayerPaths'
+
+/** Absolute paths of the writable user patch layers. */
+interface UserPatchLayerPaths {
+  profile: string
+  home: string
+}
 
 export type * from './types.ts'
 
@@ -121,86 +128,12 @@ function inferDescription(moduleName: string, type: PluginEntryType): string {
   return `${short} (${type})`
 }
 
-/** Find the active profile's cordis.patch.yml by scanning profiles directory. */
-function findActivePatchFile(): string | undefined {
-  try {
-    const profilesDir = dshHomePath('profiles')
-    const entries = readdirSync(profilesDir, { withFileTypes: true })
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue
-      const patchFile = join(profilesDir, entry.name, 'cordis.patch.yml')
-      try { accessSync(patchFile, constants.W_OK) } catch { continue }
-      return patchFile
-    }
-  } catch { /* profiles dir may not exist when running from source */ }
-  return undefined
-}
-
-/** Read the user patch list from a patch file; returns [] on error. */
-function readUserPatches(patchFile: string): Record<string, unknown>[] {
-  try {
-    const content = readFileSync(patchFile, 'utf8')
-    const data = yaml.load(content)
-    if (!Array.isArray(data)) return []
-    return data as Record<string, unknown>[]
-  } catch {
-    return []
-  }
-}
-
-/** Write the user patch list back to a patch file. */
-function writeUserPatches(patchFile: string, patches: Record<string, unknown>[]): void {
-  const header = '# Your patch layer for this dsh profile, applied after every bundle layer:\n'
-    + '# a top-level YAML array of loader patch entries (id-targeted config\n'
-    + '# overrides, disables, and insert lists; `!!js` expressions allowed).\n'
-  writeFileSync(patchFile, header + yaml.dump(patches) + '\n')
-}
-
-/** Persist a disabled state for one entry id into the user patch layer. */
-function persistDisabledState(patchFile: string, entryId: string, disabled: boolean): void {
-  const patches = readUserPatches(patchFile)
-  if (disabled) {
-    let entry = patches.find(p => p.id === entryId)
-    if (entry === undefined) {
-      entry = { id: entryId }
-      patches.push(entry)
-    }
-    entry.disabled = true
-  } else {
-    const filtered = patches.filter(p => p.id !== entryId)
-    if (filtered.length !== patches.length) {
-      writeUserPatches(patchFile, filtered)
-      return
-    }
-  }
-  writeUserPatches(patchFile, patches)
-}
-
-/** Remove an entry from the user patch layer (for uninstall persistence). */
-function removeFromUserPatches(patchFile: string, entryId: string): void {
-  const patches = readUserPatches(patchFile)
-  const filtered = patches.filter(p => p.id !== entryId)
-  if (filtered.length !== patches.length) {
-    writeUserPatches(patchFile, filtered)
-  }
-}
-
 /** Remote-only service exposing the Loader's current non-group entry state with management. */
 export class PluginInventoryGateway extends TypertRemoteService {
   static inject = ['loader']
 
-  /** Cached path to the active profile's cordis.patch.yml. */
-  private patchFile: string | undefined
-
   constructor(ctx: Context) {
     super(ctx, 'pluginInventory')
-  }
-
-  /** Resolve the active patch file once and cache it. */
-  private resolvePatchFile(): string | undefined {
-    if (this.patchFile !== undefined) return this.patchFile
-    this.patchFile = findActivePatchFile()
-    return this.patchFile
   }
 
   /**
@@ -231,8 +164,65 @@ export class PluginInventoryGateway extends TypertRemoteService {
   }
 
   /**
+   * Persist an enable/disable toggle to the profile's user patch layer using the
+   * *config-level* `id` (e.g. "tool-bash") so it survives restarts. The internal
+   * Loader `entry.id` is a UUID and changes on every boot, so it must not be used
+   * in patch files.
+   */
+  private writeUserPatchDisabled(configId: string, enabled: boolean): void {
+    const paths = this.ctx.get(USER_PATCH_LAYER_PATHS) as UserPatchLayerPaths | undefined
+    if (paths === undefined) return
+    const patchPath = paths.profile
+    let loaded: unknown[] = []
+    if (existsSync(patchPath)) {
+      const raw = readFileSync(patchPath, 'utf8')
+      const parsed = yaml.load(raw)
+      if (Array.isArray(parsed)) loaded = parsed as unknown[]
+    }
+    const patches: Array<Record<string, unknown>> = []
+    for (const item of loaded) {
+      if (item !== null && typeof item === 'object') patches.push(item as Record<string, unknown>)
+    }
+    const existing = patches.find(patch => typeof patch.id === 'string' && patch.id === configId)
+    if (existing) {
+      const existingIndex = patches.indexOf(existing)
+      if (enabled) {
+        const merged: Record<string, unknown> = { id: configId }
+        for (const key of Object.keys(existing)) {
+          if (key === 'id' || key === 'disabled') continue
+          merged[key] = existing[key]
+        }
+        // If the id-targeted patch no longer carries any overrides after
+        // removing the disable flag, drop the whole row rather than leaving
+        // a structurally empty `{ id: x }` placeholder that would shadow a
+        // bundle's later config changes for the same row.
+        const remaining = Object.keys(merged).filter(key => key !== 'id')
+        if (remaining.length === 0) {
+          patches.splice(existingIndex, 1)
+        } else {
+          patches[existingIndex] = merged
+        }
+      } else {
+        const merged: Record<string, unknown> = { id: configId, disabled: true }
+        for (const key of Object.keys(existing)) {
+          if (key === 'id' || key === 'disabled') continue
+          merged[key] = existing[key]
+        }
+        patches[existingIndex] = merged
+      }
+    } else if (!enabled) {
+      patches.push({ id: configId, disabled: true })
+    }
+    writeFileSync(patchPath, yaml.dump(patches))
+  }
+
+  /**
    * Toggle a plugin entry's enabled state by updating its Loader options.
-   * @param entryId - Stable entry identity to toggle.
+   * When the host provides writable user patch layer paths (profile launcher
+   * surface), the change is additionally persisted into the profile's own
+   * `cordis.patch.yml` using the *config-level* `id` (e.g. "tool-bash") so it
+   * survives a process restart.
+   * @param entryId - Internal Loader entry id (UUID) to toggle.
    * @param enabled - Target enabled state.
    * @returns Success with the new state, or a typed failure.
    */
@@ -241,8 +231,11 @@ export class PluginInventoryGateway extends TypertRemoteService {
     try {
       const entry = this.ctx.loader.resolve(entryId)
       await this.ctx.loader.update(entryId, { disabled: enabled ? null : true })
-      const patchFile = this.resolvePatchFile()
-      if (patchFile !== undefined) persistDisabledState(patchFile, entry.options.id, !enabled)
+      // Use the stable config id (e.g. "tool-bash") for the patch file, not the ephemeral UUID.
+      const configId = entry.options.id
+      if (typeof configId === 'string') {
+        this.writeUserPatchDisabled(configId, enabled)
+      }
       return { ok: true, entryId: pluginEntryId(entryId), enabled }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -290,8 +283,6 @@ export class PluginInventoryGateway extends TypertRemoteService {
         }
       }
       await this.ctx.loader.remove(entryId)
-      const patchFile = this.resolvePatchFile()
-      if (patchFile !== undefined) removeFromUserPatches(patchFile, entry.options.id)
       return { ok: true, entryId: pluginEntryId(entryId) }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)

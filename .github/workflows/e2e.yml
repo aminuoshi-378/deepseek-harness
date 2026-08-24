@@ -55,11 +55,12 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     name: e2e
-    # Run on every trusted event. Skip untrusted PRs (forks + Dependabot) where
-    # the secret is withheld — they would otherwise hard-fail the preflight.
-    if: >-
-      github.event_name != 'pull_request'
-      || !(github.event.pull_request.head.repo.fork || github.event.pull_request.user.login == 'dependabot[bot]')
+    # Disabled on this fork: the job always shows `skipped` and never fires
+    # real DeepSeek API calls. The job previously hard-failed because this fork
+    # has no DEEPSEEK_API_KEY_EXTERNAL secret (repo secrets are not inherited by
+    # forks) and the preflight deliberately fails loud when the key is missing.
+    # To re-enable, restore the old condition below and set the fork secret.
+    if: false
     # Bounded file parallelism (DSH_E2E_MAX_WORKERS), 120s/test, retry 2. 45m
     # still bounds retry storms against a slow API while the happy path fans out.
     timeout-minutes: 45
@@ -107,7 +108,8 @@ jobs:
         run: pnpm run build:official
 
       # Real-API end-to-end tests only. The keyless gates (lint/typecheck/
-      # coverage/snapshot/etc.) already run in ci.yml on every push/PR.
+      # coverage/snapshot/etc.) already run in ci.yml (pull requests) and
+      # ci-master.yml (master push standby).
       # DEEPSEEK_BASE_URL is pinned to the external API; the secret is scoped to
       # this step (and preflight) only — never exposed to checkout/setup/install.
       - name: E2E tests (real DeepSeek API)

@@ -155,8 +155,10 @@
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 8px;
   outline: none;
-  background: var(--dsw-alias-bg-input);
-  color: var(--dsh-alias-label-primary);
+  /* Menu-surface tone, matching the sibling providerSelect and the
+     ui-primitives Menu card, so the vendor/skin overrides stay legible. */
+  background: var(--dsw-specific-menu);
+  color: var(--dsw-alias-label-primary);
   font-size: 13px;
   line-height: 20px;
 }
@@ -169,23 +171,41 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
+/* Chip-style trigger for the provider Menu, matching the PermissionSelect
+   trigger: transparent background, rounded chrome, secondary label. */
 .providerSelect {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   flex: 0 0 auto;
-  max-width: 100px;
+  max-width: 140px;
   height: 30px;
-  padding: 0 6px;
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
+  padding: 0 4px 0 8px;
+  border: none;
+  border-radius: 24px;
   outline: none;
-  background: var(--dsw-alias-bg-input);
-  color: var(--dsh-alias-label-secondary);
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
   font-size: 13px;
   line-height: 20px;
+  font-weight: 500;
   cursor: pointer;
+  white-space: nowrap;
 }
 
-.providerSelect:focus {
-  border-color: var(--dsw-alias-border-l3);
+.providerSelect:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.providerSelect:focus-visible {
+  box-shadow: 0 0 0 2px var(--dsw-alias-border-l3);
+}
+
+.providerSelectLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .group + .group {
