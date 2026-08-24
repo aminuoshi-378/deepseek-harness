@@ -1,0 +1,23 @@
+{
+  "name": "@deepseek-ai/dsh-self-improving",
+  "description": "Cross-session learning layer for the DeepSeek Harness",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "exports": {
+    ".": {
+      "default": "./src/index.ts"
+    }
+  },
+  "dependencies": {
+    "@deepseek-ai/cordis": "workspace:*",
+    "@deepseek-ai/dsh-agent": "workspace:*",
+    "@deepseek-ai/dsh-tools": "workspace:*",
+    "@deepseek-ai/dsh-session": "workspace:*",
+    "@deepseek-ai/dsh-system-prompt": "workspace:*",
+    "@deepseek-ai/dsh-llm": "workspace:*",
+    "@deepseek-ai/schemastery": "workspace:*",
+    "better-sqlite3": "^11.0.0",
+    "ulid": "^2.3.0"
+  }
+}
