@@ -11,6 +11,10 @@ export type PluginsSettingsLocaleKey =
   | 'webSearchTitle' | 'webSearchDescription'
   | 'webSearchApiKey' | 'webSearchApiKeyHint' | 'webSearchApiKeySet' | 'webSearchApiKeyUnset'
   | 'webSearchBaseUrl' | 'webSearchBaseUrlHint' | 'webSearchMaxUses' | 'webSearchMaxUsesHint'
+  | 'tavilyTitle' | 'tavilyDescription'
+  | 'tavilyApiKey' | 'tavilyApiKeyHint' | 'tavilyApiKeySet' | 'tavilyApiKeyUnset'
+  | 'tavilyBaseUrl' | 'tavilyBaseUrlHint' | 'tavilyMaxResults' | 'tavilyMaxResultsHint'
+  | 'tavilySearchDepth' | 'tavilySearchDepthHint'
 
 /** English copy. */
 export const en: Record<PluginsSettingsLocaleKey, string> = {
@@ -51,6 +55,18 @@ export const en: Record<PluginsSettingsLocaleKey, string> = {
   webSearchBaseUrlHint: 'Leave blank to use the provider default.',
   webSearchMaxUses: 'Max searches per request',
   webSearchMaxUsesHint: 'How many times one request may search before it must answer.',
+  tavilyTitle: 'Tavily web search',
+  tavilyDescription: 'The Tavily search provider.',
+  tavilyApiKey: 'API key',
+  tavilyApiKeyHint: 'Stored outside the settings file. Leave blank to keep the current key.',
+  tavilyApiKeySet: 'A key is configured.',
+  tavilyApiKeyUnset: 'No key is configured; search is unavailable until one is.',
+  tavilyBaseUrl: 'Endpoint',
+  tavilyBaseUrlHint: 'Leave blank to use the provider default. Enter the base host only; do not append /search (it is added automatically).',
+  tavilyMaxResults: 'Default result count',
+  tavilyMaxResultsHint: 'How many results one search returns unless the request overrides it.',
+  tavilySearchDepth: 'Extraction depth',
+  tavilySearchDepthHint: 'basic or advanced; advanced trades credits for richer extracts.',
 }
 
 /** Simplified Chinese copy. */
@@ -92,4 +108,16 @@ export const zh: Record<PluginsSettingsLocaleKey, string> = {
   webSearchBaseUrlHint: '留空则使用提供方默认地址。',
   webSearchMaxUses: '单次请求最多搜索次数',
   webSearchMaxUsesHint: '一次请求在必须作答前最多可以搜索多少次。',
+  tavilyTitle: 'Tavily 网页搜索',
+  tavilyDescription: 'Tavily 搜索提供方。',
+  tavilyApiKey: 'API Key',
+  tavilyApiKeyHint: '不写入设置文件。留空表示保持当前密钥。',
+  tavilyApiKeySet: '已配置密钥。',
+  tavilyApiKeyUnset: '未配置密钥；配置之前搜索不可用。',
+  tavilyBaseUrl: '接口地址',
+  tavilyBaseUrlHint: '留空则使用提供方默认地址。只填域名主地址，不要追加 /search（会自动补上）。',
+  tavilyMaxResults: '默认结果数',
+  tavilyMaxResultsHint: '一次搜索返回多少条结果，除非请求覆盖该值。',
+  tavilySearchDepth: '提取深度',
+  tavilySearchDepthHint: 'basic 或 advanced；advanced 用更多额度换取更丰富的摘要。',
 }
