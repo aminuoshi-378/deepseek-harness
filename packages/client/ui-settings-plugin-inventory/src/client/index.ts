@@ -10,9 +10,11 @@ import type {} from '@deepseek-ai/dsh-client-ui-agent-preset/client'
 // Inline-safe shared fold: shipped ids map to dictionary keys in one home.
 import { presetDisplayText } from '@deepseek-ai/dsh-agent-presets/display'
 import { PluginInventorySettingsTab, type PluginInventorySettingsTabInjected } from './PluginInventorySettingsTab.tsx'
+import { PluginManagementTab, type PluginManagementTabInjected } from './PluginManagementTab.tsx'
 import { en, zh, type PluginInventoryLocaleKey } from './locales.ts'
 
 export type { PluginInventorySettingsTabInjected, PluginInventorySettingsTabProps } from './PluginInventorySettingsTab.tsx'
+export type { PluginManagementTabInjected, PluginManagementTabProps } from './PluginManagementTab.tsx'
 export type { PluginInventoryLocaleKey } from './locales.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -47,6 +49,30 @@ export function apply(ctx: ClientContext): void {
     presetDisplayText(preset, agentPresetCopy).name
   const injected = (): PluginInventorySettingsTabInjected => ({ list, presetName })
 
+  // Write operations for the management tab
+  const setEnabled: PluginManagementTabInjected['setEnabled'] = async (entryId, enabled) => {
+    const result = await ctx.remote.pluginInventory.setEnabled(entryId, enabled)
+    if (!result.ok) {
+      throw new Error(`pluginInventory.setEnabled failed: ${result.error.code}: ${result.error.message}`)
+    }
+    return result.value
+  }
+  const uninstall: PluginManagementTabInjected['uninstall'] = async (entryId) => {
+    const result = await ctx.remote.pluginInventory.uninstall(entryId)
+    if (!result.ok) {
+      throw new Error(`pluginInventory.uninstall failed: ${result.error.code}: ${result.error.message}`)
+    }
+    return result.value
+  }
+  const install: PluginManagementTabInjected['install'] = async (moduleName) => {
+    const result = await ctx.remote.pluginInventory.addPlugin(moduleName)
+    if (!result.ok) {
+      throw new Error(`pluginInventory.install failed: ${result.error.code}: ${result.error.message}`)
+    }
+    return result.value
+  }
+  const mgmtInjected = (): PluginManagementTabInjected => ({ list, setEnabled, uninstall, install })
+
   ctx.slots.inject('settings.plugins.tab', () => ctx.slots.register({
     name: 'settings.plugins.tab',
     id: 'all',
@@ -55,4 +81,13 @@ export function apply(ctx: ClientContext): void {
     locale: NS,
     inject: injected,
   }, PluginInventorySettingsTab))
+
+  ctx.slots.inject('settings.plugins.tab', () => ctx.slots.register({
+    name: 'settings.plugins.tab',
+    id: 'management',
+    order: 20,
+    label: () => t('managementTab'),
+    locale: NS,
+    inject: mgmtInjected,
+  }, PluginManagementTab))
 }

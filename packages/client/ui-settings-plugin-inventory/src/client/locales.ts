@@ -3,6 +3,7 @@
 /** Simplified Chinese dictionary and key source of truth. */
 export const zh = {
   tab: '插件列表',
+  managementTab: '插件管理',
   loading: '正在读取插件…',
   error: '暂时无法读取插件。',
   retry: '重试',
@@ -38,40 +39,15 @@ export const zh = {
   active: '运行中',
   failed: '启动失败',
   unloading: '卸载中',
-  // ── 来源筛选 ──
-  source: '来源',
-  sourceAll: '全部来源',
-  sourceBuiltin: '内置',
-  sourceThirdParty: '第三方',
-  // ── 类型筛选 ──
-  type: '类型',
-  typeAll: '全部类型',
-  // ── 插件详情 ──
+  // ── 插件管理 ──
   description: '用途',
-  module: '模块名',
-  // ── 操作按钮 ──
-  enable: '启用',
-  disable: '禁用',
-  uninstall: '卸载',
   install: '安装插件',
   installModuleName: '模块名',
   installModuleNamePlaceholder: '如 @scope/my-plugin',
-  installConfig: '配置（可选）',
-  installConfigPlaceholder: 'JSON 配置',
   installConfirm: '确认安装',
   installCancel: '取消',
-  // ── 操作状态 ──
-  toggling: '正在切换…',
-  uninstalling: '正在卸载…',
   installing: '正在安装…',
-  toggleFailed: '切换失败',
-  uninstallFailed: '卸载失败',
   installFailed: '安装失败',
-  builtinProtected: '内置插件不可卸载',
-  uninstallConfirm: '确定要卸载此插件吗？',
-  // ── 来源标签 ──
-  builtinTag: '内置',
-  thirdPartyTag: '第三方',
   // ── 批量操作 ──
   batchEnable: '批量启用',
   batchDisable: '批量禁用',
@@ -81,10 +57,11 @@ export const zh = {
   batchSelected: '已选 {count} 项',
   batchEnableConfirm: '确定要启用选中的 {count} 个插件吗？',
   batchDisableConfirm: '确定要禁用选中的 {count} 个插件吗？',
-  batchUninstallConfirm: '确定要卸载选中的 {count} 个插件吗？（内置插件不会被卸载）',
+  batchUninstallConfirm: '确定要卸载选中的 {count} 个插件吗？',
   batchInProgress: '正在批量操作…',
   batchPartialFailed: '{failed} 个插件操作失败',
-  batchDone: '{count} 个插件操作完成',
+  batchConfirm: '确认',
+  cancel: '取消',
 } satisfies Record<string, string>
 
 /** Plugin inventory locale key union. */
@@ -93,6 +70,7 @@ export type PluginInventoryLocaleKey = keyof typeof zh
 /** English dictionary checked against the Chinese key set. */
 export const en = {
   tab: 'Plugin list',
+  managementTab: 'Plugin management',
   loading: 'Reading plugins…',
   error: 'Plugins are temporarily unavailable.',
   retry: 'Retry',
@@ -128,40 +106,15 @@ export const en = {
   active: 'Running',
   failed: 'Failed to start',
   unloading: 'Unloading',
-  // ── Source filter ──
-  source: 'Source',
-  sourceAll: 'All sources',
-  sourceBuiltin: 'Built-in',
-  sourceThirdParty: 'Third-party',
-  // ── Type filter ──
-  type: 'Type',
-  typeAll: 'All types',
-  // ── Plugin details ──
+  // ── Plugin management ──
   description: 'Purpose',
-  module: 'Module name',
-  // ── Action buttons ──
-  enable: 'Enable',
-  disable: 'Disable',
-  uninstall: 'Uninstall',
   install: 'Install plugin',
   installModuleName: 'Module name',
   installModuleNamePlaceholder: 'e.g. @scope/my-plugin',
-  installConfig: 'Config (optional)',
-  installConfigPlaceholder: 'JSON config',
   installConfirm: 'Confirm install',
   installCancel: 'Cancel',
-  // ── Action status ──
-  toggling: 'Toggling…',
-  uninstalling: 'Uninstalling…',
   installing: 'Installing…',
-  toggleFailed: 'Toggle failed',
-  uninstallFailed: 'Uninstall failed',
   installFailed: 'Install failed',
-  builtinProtected: 'Built-in plugins cannot be uninstalled',
-  uninstallConfirm: 'Are you sure you want to uninstall this plugin?',
-  // ── Source tags ──
-  builtinTag: 'Built-in',
-  thirdPartyTag: 'Third-party',
   // ── Batch operations ──
   batchEnable: 'Enable selected',
   batchDisable: 'Disable selected',
@@ -171,8 +124,9 @@ export const en = {
   batchSelected: '{count} selected',
   batchEnableConfirm: 'Enable {count} selected plugins?',
   batchDisableConfirm: 'Disable {count} selected plugins?',
-  batchUninstallConfirm: 'Uninstall {count} selected plugins? (built-in plugins will be skipped)',
+  batchUninstallConfirm: 'Uninstall {count} selected plugins?',
   batchInProgress: 'Batch operation in progress…',
   batchPartialFailed: '{failed} plugins failed',
-  batchDone: '{count} plugins processed',
+  batchConfirm: 'Confirm',
+  cancel: 'Cancel',
 } satisfies Record<PluginInventoryLocaleKey, string>

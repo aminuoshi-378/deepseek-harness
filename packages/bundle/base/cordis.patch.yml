@@ -488,16 +488,6 @@
     - id: fs-sandbox
       name: '@deepseek-ai/dsh-fs-sandbox'
 
-    # Cross-session learning layer: observes tool outcomes, stores experiences
-    # in SQLite, and injects learned lessons into future agent turns.
-    - id: self-improving
-      name: '@deepseek-ai/dsh-self-improving'
-      config:
-        dbPath: ':memory:'
-        metaCognitionEnabled: true
-        behaviorAdapterEnabled: true
-        minInjectionScore: 0.3
-
     # The native DeepSeek adapter. No key or endpoint is inlined: both resolve per
     # request from the `llm-deepseek:` settings section over this entry, with the
     # key coming from the credential store below. Thinking defaults are a deployment

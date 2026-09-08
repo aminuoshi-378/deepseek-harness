@@ -19,7 +19,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { launchEnvironmentOf } from '@deepseek-ai/dsh-launch-environment'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
-import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
+import type {} from '@deepseek-ai/dsh-settings'
 import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-web'
 import {
@@ -48,7 +48,7 @@ export const inject = ['web']
 const DEFAULT_API_KEY_ENV = 'TAVILY_API_KEY'
 
 /** Settings namespace carrying this provider's endpoint, budget, and key reference. */
-export const WEB_SEARCH_TAVILY_SETTINGS_NAMESPACE = settingsNamespace('web-search-tavily')
+export const WEB_SEARCH_TAVILY_SETTINGS_NAMESPACE = 'web-search-tavily'
 
 /** Plugin config (all optional — `apply` fills env-var and constant defaults). */
 export interface Config {
@@ -107,13 +107,13 @@ function resolveOptions(ctx: Context, config: Config): TavilySearchProviderOptio
  */
 export function apply(ctx: Context, config: Config): void {
   let current: () => Config = () => config
-  installSettingsSection(ctx, WEB_SEARCH_TAVILY_SETTINGS_NAMESPACE, Config, config, {
-    setSource: (source) => {
-      current = source
-    },
-    // The registration carries no resolved value: the provider projects the
-    // section per search, so a committed change needs no re-registration.
-    onChange: () => {},
+  ctx.inject(['settings'], (settingsCtx) => {
+    settingsCtx.settings.installSection(ctx, WEB_SEARCH_TAVILY_SETTINGS_NAMESPACE, Config, config, {
+      setSource: (source) => {
+        current = source
+      },
+      onChange: () => {},
+    })
   })
   ctx.web.registerSearchProvider(new TavilySearchProvider(() => resolveOptions(ctx, current())))
 }

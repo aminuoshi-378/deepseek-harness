@@ -1,5 +1,5 @@
 {
-  "name": "dsh-self-improving",
+  "name": "@deepseek-ai/dsh-self-improving",
   "description": "Cross-session learning layer for the DeepSeek Harness",
   "version": "0.1.0",
   "type": "module",
