@@ -1,42 +1,40 @@
-import { useCallback, useEffect, useId, useMemo, useState, type ReactNode } from 'react'
-import type {
-  PluginInventoryInstallResult,
-  PluginInventorySnapshot,
-  PluginInventoryToggleResult,
-  PluginInventoryUninstallResult,
-} from '@deepseek-ai/dsh-api-remotes/client'
+import { useEffect, useId, useMemo, useState, type ReactNode } from 'react'
+import type { PluginInventorySnapshot } from '@deepseek-ai/dsh-api-remotes/client'
 import {
   IconChevronDownOutline14,
   IconSearchOutline16,
   Menu,
+  StateDot,
+  Tag,
 } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { MenuEntry } from '@deepseek-ai/dsh-client-ui-primitives'
+import type { StateDotState, TagTone } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { PluginInventoryLocaleKey } from './locales.ts'
 import css from './PluginInventorySettingsTab.module.css'
+
+type PluginInventoryEntry = PluginInventorySnapshot['entries'][number]
+type AgentPresetGroup = NonNullable<PluginInventorySnapshot['agentPresets']>[number]
+type AgentPresetRow = AgentPresetGroup['rows'][number]
 
 /** Registration-side Remote face used by the section. */
 export interface PluginInventorySettingsTabInjected {
   /** Read a current Host inventory snapshot. */
   list: () => Promise<PluginInventorySnapshot>
-  /** Toggle a plugin entry's enabled state. */
-  setEnabled: (entryId: string, enabled: boolean) => Promise<PluginInventoryToggleResult>
-  /** Uninstall a plugin entry. */
-  uninstall: (entryId: string) => Promise<PluginInventoryUninstallResult>
-  /** Install a new plugin entry by module name. */
-  install: (moduleName: string) => Promise<PluginInventoryInstallResult>
+  /**
+   * Display name for one preset: shipped presets resolve through the
+   * agent-preset dictionaries, user-authored ones keep their own metadata.
+   */
+  presetName: (preset: AgentPresetGroup) => string
 }
-
-type PluginInventoryEntry = PluginInventorySnapshot['entries'][number]
 type PluginFiberPhase = PluginInventoryEntry['fiberPhase']
-type PluginEntrySource = PluginInventoryEntry['source']
-type PluginEntryType = PluginInventoryEntry['type']
 
 /** Full component props assembled by the Settings slot renderer. */
 export type PluginInventorySettingsTabProps =
   PropsRuntime<'settings.plugins.tab'>
   & PropsLocale<'settings.pluginInventory'>
   & InjectFace<PluginInventorySettingsTabInjected>
+
+type Translate = PluginInventorySettingsTabProps['t']
 
 type ViewState =
   | { readonly status: 'loading' }
@@ -52,10 +50,7 @@ const PHASE_KEYS = {
 } satisfies Record<Exclude<PluginFiberPhase, null>, PluginInventoryLocaleKey>
 
 /** Localized accessible label for one root Fiber phase. */
-function phaseLabel(
-  phase: PluginFiberPhase,
-  t: PluginInventorySettingsTabProps['t'],
-): string {
+function phaseLabel(phase: PluginFiberPhase, t: Translate): string {
   return phase === null ? t('unobserved') : t(PHASE_KEYS[phase])
 }
 
@@ -68,41 +63,142 @@ function moduleShortName(moduleName: string): string {
     .replace(/^dsh-(?:host-|client-)?/, '')
 }
 
-/** Whether an inventory row matches the local catalog query and filters. */
-function matches(
-  entry: PluginInventoryEntry,
-  normalizedQuery: string,
-  sourceFilter: PluginEntrySource | 'all',
-  typeFilter: PluginEntryType | 'all',
-): boolean {
-  if (sourceFilter !== 'all' && entry.source !== sourceFilter) return false
-  if (typeFilter !== 'all' && entry.type !== typeFilter) return false
+/** Whether one row's module name or entry id matches the catalog query. */
+function matches(moduleName: string, entryId: string | null, normalizedQuery: string): boolean {
   if (normalizedQuery.length === 0) return true
-  return [entry.moduleName, entry.entryId, entry.description, entry.type, entry.source]
+  return [moduleName, ...entryId === null ? [] : [entryId]]
     .some(value => value.toLocaleLowerCase().includes(normalizedQuery))
 }
 
-/** Render the plugin inventory with filtering, source/type facets, and management actions. */
-export function PluginInventorySettingsTab({ list, setEnabled, uninstall, install, t }: PluginInventorySettingsTabProps): ReactNode {
-  const catalogId = useId()
+/** The roster row shown when the preset switcher has no explicit choice. */
+function fallbackPreset(presets: readonly AgentPresetGroup[]): AgentPresetGroup | undefined {
+  return presets.find(preset => preset.isDefault) ?? presets[0]
+}
+
+/** The switcher's display label for one preset. */
+function presetLabel(preset: AgentPresetGroup, t: Translate, presetName: (preset: AgentPresetGroup) => string): string {
+  const name = presetName(preset)
+  if (preset.broken !== undefined) return t('presetOptionBroken', { name })
+  if (preset.isDefault) return t('presetOptionDefault', { name })
+  return name
+}
+
+/** One expandable plugin card; the caller owns the trailing status content. */
+function PluginCard({ rowKey, moduleName, entryId, trailing, ariaLabel, failed, expanded, onToggle, children }: {
+  readonly rowKey: string
+  readonly moduleName: string
+  readonly entryId: string | null
+  readonly trailing: ReactNode
+  readonly ariaLabel: string
+  readonly failed: boolean
+  readonly expanded: string | null
+  readonly onToggle: (key: string) => void
+  readonly children: ReactNode
+}): ReactNode {
+  const open = expanded === rowKey
+  const detailId = `plugin-details-${encodeURIComponent(rowKey)}`
+  return (
+    <li
+      className={css.card}
+      data-plugin-entry={entryId ?? undefined}
+      data-plugin-module={moduleName}
+      data-failed={failed ? 'true' : undefined}
+      data-open={open ? 'true' : undefined}
+    >
+      <button
+        className={css.cardContent}
+        type="button"
+        aria-expanded={open}
+        aria-controls={detailId}
+        aria-label={ariaLabel}
+        onClick={() => { onToggle(rowKey) }}
+      >
+        <strong className={css.cardTitle} title={moduleName}>{moduleShortName(moduleName)}</strong>
+        <span className={css.cardTrailing}>
+          {trailing}
+          <IconChevronDownOutline14 className={css.chevron} size={12} aria-hidden="true" />
+        </span>
+      </button>
+      {open ? <div className={css.cardDetails} id={detailId}>{children}</div> : null}
+    </li>
+  )
+}
+
+/** Detail rows shared by every card: the Loader identity, then labeled facts. */
+function CardFacts({ moduleName, moduleLabel, entryId, facts }: {
+  readonly moduleName: string
+  readonly moduleLabel: string
+  readonly entryId: string | null
+  readonly facts: readonly (readonly [label: string, value: ReactNode])[]
+}): ReactNode {
+  return (
+    <>
+      {entryId === null ? null : <code className={css.entryValue} data-loader-entry>{entryId}</code>}
+      <dl className={css.details}>
+        <div>
+          <dt>{moduleLabel}</dt>
+          <dd>{moduleName}</dd>
+        </div>
+        {facts.map(([label, value]) => (
+          <div key={label}>
+            <dt>{label}</dt>
+            <dd>{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </>
+  )
+}
+
+/* `pending` is the only phase with no work under way. `loading` and
+ * `unloading` are both live transitions the Host is running — an async
+ * disposer can hold `unloading` for a while — so both animate. */
+const PHASE_DOT_STATES = {
+  pending: 'idle',
+  loading: 'ongoing',
+  active: 'done',
+  failed: 'error',
+  unloading: 'ongoing',
+} as const satisfies Record<NonNullable<PluginFiberPhase>, StateDotState>
+
+/** Status dot naming a live root-fiber phase; rows with no live fiber show none. */
+function PhaseDot({ phase, t }: { readonly phase: NonNullable<PluginFiberPhase>; readonly t: Translate }): ReactNode {
+  const status = phaseLabel(phase, t)
+  /* StateDot is aria-hidden, so the phase name lives on this wrapper. */
+  return (
+    <span className={css.phaseDot} role="img" aria-label={status} title={status}>
+      <StateDot state={PHASE_DOT_STATES[phase]} />
+    </span>
+  )
+}
+
+/** Enablement states one inventory row can report. */
+type EnablementKind = 'enabled' | 'disabled' | 'conditional' | 'preset' | 'failed'
+
+const TAG_TONES = {
+  enabled: 'success',
+  disabled: 'neutral',
+  conditional: 'warning',
+  preset: 'info',
+  failed: 'danger',
+} as const satisfies Record<EnablementKind, TagTone>
+
+/** Enablement tag; `kind` selects the palette. */
+function StateTag({ kind, label }: { readonly kind: EnablementKind; readonly label: string }): ReactNode {
+  return <Tag tone={TAG_TONES[kind]}>{label}</Tag>
+}
+
+/** Render the read-only plugin inventory: agent presets first, then the global plane. */
+export function PluginInventorySettingsTab({ list, presetName, t }: PluginInventorySettingsTabProps): ReactNode {
+  const sectionId = useId()
   const [request, setRequest] = useState(0)
   const [query, setQuery] = useState('')
-  const [expanded, setExpanded] = useState<PluginInventoryEntry['entryId'] | null>(null)
-  const [sourceFilter, setSourceFilter] = useState<PluginEntrySource | 'all'>('all')
-  const [typeFilter, setTypeFilter] = useState<PluginEntryType | 'all'>('all')
-  const [sourceMenuOpen, setSourceMenuOpen] = useState(false)
-  const [typeMenuOpen, setTypeMenuOpen] = useState(false)
+  const [expanded, setExpanded] = useState<string | null>(null)
+  const [chosenPreset, setChosenPreset] = useState<string | null>(null)
+  const [switcherOpen, setSwitcherOpen] = useState(false)
+  const [presetOpen, setPresetOpen] = useState<boolean | null>(null)
+  const [globalOpen, setGlobalOpen] = useState<boolean | null>(null)
   const [state, setState] = useState<ViewState>({ status: 'loading' })
-  const [actionInProgress, setActionInProgress] = useState<string | null>(null)
-  const [actionError, setActionError] = useState<string | null>(null)
-  const [showInstall, setShowInstall] = useState(false)
-  const [installName, setInstallName] = useState('')
-  const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [batchInProgress, setBatchInProgress] = useState(false)
-
-  const refresh = useCallback(() => {
-    setRequest(value => value + 1)
-  }, [])
 
   useEffect(() => {
     let current = true
@@ -114,141 +210,160 @@ export function PluginInventorySettingsTab({ list, setEnabled, uninstall, instal
   }, [list, request])
 
   const normalizedQuery = query.trim().toLocaleLowerCase()
+  const searching = normalizedQuery.length > 0
+  const snapshot = state.status === 'ready' ? state.snapshot : undefined
+  const presets = snapshot?.agentPresets ?? []
+  const selected = presets.find(preset => preset.id === chosenPreset) ?? fallbackPreset(presets)
 
-  // Collect available types from the snapshot for the type filter dropdown.
-  const availableTypes = useMemo(() => {
-    if (state.status !== 'ready') return [] as PluginEntryType[]
-    const types = new Set<PluginEntryType>()
-    for (const entry of state.snapshot.entries) {
-      if (sourceFilter !== 'all' && entry.source !== sourceFilter) continue
-      types.add(entry.type)
+  /** Presets that actually enable a module, keyed by module name. */
+  const enabledIn = useMemo(() => {
+    const found = new Map<string, [AgentPresetGroup, ...AgentPresetGroup[]]>()
+    for (const preset of presets) {
+      for (const row of preset.rows) {
+        if (row.enabled !== true) continue
+        const groups = found.get(row.moduleName)
+        if (groups === undefined) found.set(row.moduleName, [preset])
+        else if (!groups.includes(preset)) groups.push(preset)
+      }
     }
-    return [...types].sort()
-  }, [state, sourceFilter])
+    return found
+  }, [presets])
 
-  const filteredEntries = useMemo(
-    () => state.status === 'ready'
-      ? state.snapshot.entries.filter(entry => matches(entry, normalizedQuery, sourceFilter, typeFilter))
-      : [],
-    [normalizedQuery, state, sourceFilter, typeFilter],
-  )
+  const entries = snapshot?.entries ?? []
+  const failedEntries: PluginInventoryEntry[] = []
+  const regularEntries: PluginInventoryEntry[] = []
+  for (const entry of entries) {
+    if (entry.fiberPhase === 'failed') failedEntries.push(entry)
+    else regularEntries.push(entry)
+  }
 
-  useEffect(() => {
-    if (expanded !== null && !filteredEntries.some(entry => entry.entryId === expanded)) {
-      setExpanded(null)
-    }
-  }, [expanded, filteredEntries])
+  const entryMatch = (entry: PluginInventoryEntry): boolean => matches(entry.moduleName, entry.entryId, normalizedQuery)
+  const rowMatch = (row: AgentPresetRow): boolean => matches(row.moduleName, row.entryId, normalizedQuery)
+  const filteredFailed = failedEntries.filter(entryMatch)
+  const filteredRegular = regularEntries.filter(entryMatch)
+  const globalCount = filteredFailed.length + filteredRegular.length
+  const selectedRows = selected === undefined ? [] : selected.rows.filter(rowMatch)
+  const otherPresetMatches = searching
+    ? presets.filter(preset => preset !== selected && preset.rows.some(rowMatch))
+    : []
+  const otherMatchCount = otherPresetMatches
+    .reduce((total, preset) => total + preset.rows.filter(rowMatch).length, 0)
+
+  const presetEffectiveOpen = searching || (presetOpen ?? true)
+  const globalEffectiveOpen = searching || (globalOpen ?? presets.length === 0)
+  const nothingMatches = searching && globalCount === 0 && selectedRows.length === 0
+    && otherPresetMatches.length === 0
 
   const retry = (): void => {
     setState({ status: 'loading' })
-    refresh()
+    setRequest(value => value + 1)
+  }
+  const toggleRow = (key: string): void => {
+    setExpanded(current => current === key ? null : key)
   }
 
-  const handleToggle = useCallback(async (entry: PluginInventoryEntry) => {
-    setActionInProgress(entry.entryId)
-    setActionError(null)
-    try {
-      const result = await setEnabled(entry.entryId, !entry.enabled)
-      if (!result.ok) {
-        setActionError(result.message)
-      } else {
-        refresh()
-      }
-    } catch {
-      setActionError(t('toggleFailed'))
-    } finally {
-      setActionInProgress(null)
-    }
-  }, [setEnabled, refresh, t])
+  /** Trailing status and detail facts for one row of the selected preset. */
+  const presetRowCard = (preset: AgentPresetGroup, row: AgentPresetRow, index: number): ReactNode => {
+    const key = `preset:${preset.id}:${String(index)}`
+    const title = moduleShortName(row.moduleName)
+    const failed = row.fiberPhase === 'failed'
+    const stateText = failed
+      ? t('failedTag')
+      : row.enabled === true ? t('enabledTag') : row.enabled === false ? t('disabledTag') : t('conditionalTag')
+    const kind = failed ? 'failed' : row.enabled === true ? 'enabled' : row.enabled === false ? 'disabled' : 'conditional'
+    return (
+      <PluginCard
+        key={key}
+        rowKey={key}
+        moduleName={row.moduleName}
+        entryId={row.entryId}
+        failed={failed}
+        expanded={expanded}
+        onToggle={toggleRow}
+        ariaLabel={`${title}, ${stateText}`}
+        trailing={(
+          <>
+            {row.enabled === true && !failed && row.fiberPhase !== null
+              ? <PhaseDot phase={row.fiberPhase} t={t} />
+              : null}
+            <StateTag kind={kind} label={stateText} />
+          </>
+        )}
+      >
+        <CardFacts
+          moduleName={row.moduleName}
+          moduleLabel={t('moduleLabel')}
+          entryId={row.entryId}
+          facts={[
+            [t('fromPreset'), presetName(preset)],
+            [t('configuration'), stateText],
+            ...row.fiberPhase === null ? [] : [[t('runtime'), phaseLabel(row.fiberPhase, t)] as const],
+            ...row.condition === undefined ? [] : [[t('condition'), <code key="condition">{row.condition}</code>] as const],
+          ]}
+        />
+      </PluginCard>
+    )
+  }
 
-  const handleUninstall = useCallback(async (entry: PluginInventoryEntry) => {
-    if (!globalThis.confirm(t('uninstallConfirm'))) return
-    setActionInProgress(entry.entryId)
-    setActionError(null)
-    try {
-      const result = await uninstall(entry.entryId)
-      if (!result.ok) {
-        setActionError(result.reason === 'builtin-protected' ? t('builtinProtected') : result.message)
-      } else {
-        refresh()
-      }
-    } catch {
-      setActionError(t('uninstallFailed'))
-    } finally {
-      setActionInProgress(null)
-    }
-  }, [uninstall, refresh, t])
-
-  const handleInstall = useCallback(async () => {
-    const name = installName.trim()
-    if (!name) return
-    setActionInProgress('__install__')
-    setActionError(null)
-    try {
-      const result = await install(name)
-      if (!result.ok) {
-        setActionError(result.message)
-      } else {
-        setInstallName('')
-        setShowInstall(false)
-        refresh()
-      }
-    } catch {
-      setActionError(t('installFailed'))
-    } finally {
-      setActionInProgress(null)
-    }
-  }, [install, installName, refresh, t])
-
-  const toggleSelect = useCallback((entryId: string) => {
-    setSelected((prev) => {
-      const next = new Set(prev)
-      if (next.has(entryId)) next.delete(entryId)
-      else next.add(entryId)
-      return next
-    })
-  }, [])
-
-  const selectAllFiltered = useCallback(() => {
-    setSelected(new Set(filteredEntries.map(e => e.entryId)))
-  }, [filteredEntries])
-
-  const clearSelection = useCallback(() => {
-    setSelected(new Set())
-  }, [])
-
-  const handleBatch = useCallback(async (action: 'enable' | 'disable' | 'uninstall') => {
-    const targets = filteredEntries.filter(e => selected.has(e.entryId))
-    if (targets.length === 0) return
-    const confirmMsg = action === 'enable'
-      ? t('batchEnableConfirm').replace('{count}', String(targets.length))
-      : action === 'disable'
-        ? t('batchDisableConfirm').replace('{count}', String(targets.length))
-        : t('batchUninstallConfirm').replace('{count}', String(targets.length))
-    if (!globalThis.confirm(confirmMsg)) return
-    setBatchInProgress(true)
-    setActionError(null)
-    let failed = 0
-    for (const entry of targets) {
-      try {
-        if (action === 'enable' || action === 'disable') {
-          const result = await setEnabled(entry.entryId, action === 'enable')
-          if (!result.ok) failed++
-        } else {
-          const result = await uninstall(entry.entryId)
-          if (!result.ok) failed++
-        }
-      } catch {
-        failed++
-      }
-    }
-    setSelected(new Set())
-    refresh()
-    setBatchInProgress(false)
-    if (failed > 0) {
-      setActionError(t('batchPartialFailed').replace('{failed}', String(failed)))
-    }
-  }, [filteredEntries, selected, setEnabled, uninstall, refresh, t])
+  /** One global-plane row; a preset-provided row carries the presets that enable it. */
+  const globalRowCard = (
+    entry: PluginInventoryEntry,
+    providers?: readonly [AgentPresetGroup, ...AgentPresetGroup[]],
+  ): ReactNode => {
+    const key = `global:${entry.entryId}`
+    const title = moduleShortName(entry.moduleName)
+    const failed = entry.fiberPhase === 'failed'
+    const stateText = failed
+      ? t('failedTag')
+      : providers !== undefined ? t('presetEnabledTag') : t(entry.enabled ? 'enabledTag' : 'disabledTag')
+    const kind = failed ? 'failed' : providers !== undefined ? 'preset' : entry.enabled ? 'enabled' : 'disabled'
+    return (
+      <PluginCard
+        key={key}
+        rowKey={key}
+        moduleName={entry.moduleName}
+        entryId={entry.entryId}
+        failed={failed}
+        expanded={expanded}
+        onToggle={toggleRow}
+        ariaLabel={`${title}, ${stateText}`}
+        trailing={(
+          <>
+            {entry.enabled && !failed && entry.fiberPhase !== null
+              ? <PhaseDot phase={entry.fiberPhase} t={t} />
+              : null}
+            <StateTag kind={kind} label={stateText} />
+          </>
+        )}
+      >
+        <CardFacts
+          moduleName={entry.moduleName}
+          moduleLabel={t('moduleLabel')}
+          entryId={entry.entryId}
+          facts={providers !== undefined
+            ? [
+              [t('configuration'), t('presetProvidedDetail')],
+              [t('enabledIn'), (
+                <span className={css.enabledIn}>
+                  <span>{providers.map(preset => presetName(preset)).join(' · ')}</span>
+                  <button
+                    type="button"
+                    className={css.jumpLink}
+                    onClick={() => { setChosenPreset(providers[0].id) }}
+                  >
+                    {t('viewInPreset')}
+                  </button>
+                </span>
+              )],
+            ]
+            : [
+              [t('configuration'), t(entry.enabled ? 'enabledTag' : 'disabledTag')],
+              ...entry.enabled ? [[t('runtime'), phaseLabel(entry.fiberPhase, t)] as const] : [],
+            ]}
+        />
+      </PluginCard>
+    )
+  }
 
   return (
     <div className={css.section} aria-busy={state.status === 'loading'}>
@@ -259,9 +374,8 @@ export function PluginInventorySettingsTab({ list, setEnabled, uninstall, instal
           <button type="button" onClick={retry}>{t('retry')}</button>
         </div>
       ) : null}
-      {state.status === 'ready' ? (
+      {snapshot !== undefined ? (
         <div className={css.catalog}>
-          {/* Search bar */}
           <label className={css.search}>
             <IconSearchOutline16 aria-hidden="true" />
             <span className={css.visuallyHidden}>{t('search')}</span>
@@ -273,280 +387,117 @@ export function PluginInventorySettingsTab({ list, setEnabled, uninstall, instal
               onChange={(event) => { setQuery(event.currentTarget.value) }}
             />
           </label>
+          {entries.length === 0 && presets.length === 0 ? <p className={css.status}>{t('empty')}</p> : null}
+          {nothingMatches ? <p className={css.status}>{t('emptySearch')}</p> : null}
 
-          {/* Filters */}
-          <div className={css.filters}>
-            <label className={css.filter}>
-              <span>{t('source')}</span>
-              <Menu
-                open={sourceMenuOpen}
-                align="start"
-                side="bottom"
-                items={[
-                  { id: 'all', label: t('sourceAll') },
-                  { id: 'builtin', label: t('sourceBuiltin') },
-                  { id: 'third-party', label: t('sourceThirdParty') },
-                ] as MenuEntry[]}
-                selectedId={sourceFilter}
-                onSelect={(id) => { setSourceFilter(id as PluginEntrySource | 'all'); setTypeFilter('all'); setSourceMenuOpen(false) }}
-                onClose={() => { setSourceMenuOpen(false) }}
-                anchor={
-                  <button
-                    type="button"
-                    className={css.filterSelect}
-                    onClick={() => { setSourceMenuOpen(v => !v) }}
-                  >
-                    <span className={css.filterSelectLabel}>
-                      {sourceFilter === 'all' ? t('sourceAll')
-                        : sourceFilter === 'builtin' ? t('sourceBuiltin')
-                          : t('sourceThirdParty')}
-                    </span>
-                    <span className={`${css.filterSelectChevron}${sourceMenuOpen ? ` ${css.filterSelectChevronOpen}` : ''}`} aria-hidden>
-                      <IconChevronDownOutline14 />
-                    </span>
-                  </button>
-                }
-              />
-            </label>
-            <label className={css.filter}>
-              <span>{t('type')}</span>
-              <Menu
-                open={typeMenuOpen}
-                align="start"
-                side="bottom"
-                items={[
-                  { id: 'all', label: t('typeAll') },
-                  ...availableTypes.map(type => ({ id: type, label: type })),
-                ] as MenuEntry[]}
-                selectedId={typeFilter}
-                onSelect={(id) => { setTypeFilter(id as PluginEntryType | 'all'); setTypeMenuOpen(false) }}
-                onClose={() => { setTypeMenuOpen(false) }}
-                anchor={
-                  <button
-                    type="button"
-                    className={css.filterSelect}
-                    onClick={() => { setTypeMenuOpen(v => !v) }}
-                  >
-                    <span className={css.filterSelectLabel}>
-                      {typeFilter === 'all' ? t('typeAll') : typeFilter}
-                    </span>
-                    <span className={`${css.filterSelectChevron}${typeMenuOpen ? ` ${css.filterSelectChevronOpen}` : ''}`} aria-hidden>
-                      <IconChevronDownOutline14 />
-                    </span>
-                  </button>
-                }
-              />
-            </label>
-            <button
-              type="button"
-              className={css.installButton}
-              onClick={() => { setShowInstall(s => !s) }}
-            >
-              {t('install')}
-            </button>
-          </div>
-
-          {/* Install panel */}
-          {showInstall ? (
-            <div className={css.installPanel}>
-              <label className={css.installField}>
-                <span>{t('installModuleName')}</span>
-                <input
-                  type="text"
-                  value={installName}
-                  placeholder={t('installModuleNamePlaceholder')}
-                  onChange={(e) => { setInstallName(e.target.value) }}
-                />
-              </label>
-              <div className={css.installActions}>
+          {selected !== undefined ? (
+            <section className={css.group} data-plugin-scope="preset" data-preset-id={selected.id}>
+              <div className={css.groupTitleRow}>
                 <button
                   type="button"
-                  className={css.installConfirm}
-                  disabled={!installName.trim() || actionInProgress === '__install__'}
-                  onClick={() => { void handleInstall() }}
+                  className={css.groupToggle}
+                  aria-expanded={presetEffectiveOpen}
+                  aria-controls={`${sectionId}-preset`}
+                  onClick={() => { setPresetOpen(!presetEffectiveOpen) }}
                 >
-                  {actionInProgress === '__install__' ? t('installing') : t('installConfirm')}
+                  <IconChevronDownOutline14 className={css.chevron} size={12} aria-hidden="true" />
+                  <span className={css.groupTitle}>{t('presetTitle')}</span>
                 </button>
+                <div className={css.headerEnd}>
+                  <Menu
+                    open={switcherOpen}
+                    onClose={() => { setSwitcherOpen(false) }}
+                    items={presets.map(preset => ({ id: preset.id, label: presetLabel(preset, t, presetName) }))}
+                    selectedId={selected.id}
+                    onSelect={(id) => {
+                      setSwitcherOpen(false)
+                      setChosenPreset(id)
+                    }}
+                    align="end"
+                    portal
+                    anchor={(
+                      <button
+                        type="button"
+                        className={css.switcher}
+                        aria-haspopup="menu"
+                        aria-expanded={switcherOpen}
+                        aria-label={t('switcherLabel')}
+                        onClick={() => { setSwitcherOpen(value => !value) }}
+                      >
+                        <span className={css.switcherLabel}>{presetLabel(selected, t, presetName)}</span>
+                        <IconChevronDownOutline14 className={css.chevron} aria-hidden="true" />
+                      </button>
+                    )}
+                  />
+                </div>
+              </div>
+              <p className={css.groupSub}>
+                {t('presetSubtitle')}
+                <span data-preset-plugin-count={selectedRows.length}>
+                  {` · ${String(selectedRows.length)} ${t('countUnit')}`}
+                </span>
+              </p>
+              {presetEffectiveOpen ? (
+                <div id={`${sectionId}-preset`} className={css.groupBody}>
+                  {selected.broken !== undefined ? (
+                    <p className={css.brokenNote} role="alert">{selected.broken}</p>
+                  ) : null}
+                  {selectedRows.length > 0 ? (
+                    <ul className={css.cards}>
+                      {selectedRows.map((row, index) => presetRowCard(selected, row, index))}
+                    </ul>
+                  ) : null}
+                  {otherMatchCount > 0 ? (
+                    <p className={css.hint}>
+                      {t('matchesInOtherPresets', { count: String(otherMatchCount) })}
+                      {otherPresetMatches.map(preset => (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          className={css.jumpLink}
+                          onClick={() => { setChosenPreset(preset.id) }}
+                        >
+                          {presetName(preset)}
+                        </button>
+                      ))}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+            </section>
+          ) : null}
+
+          {entries.length > 0 ? (
+            <section className={css.group} data-plugin-scope="global">
+              <div className={css.groupTitleRow}>
                 <button
                   type="button"
-                  onClick={() => { setShowInstall(false); setInstallName('') }}
+                  className={css.groupToggle}
+                  aria-expanded={globalEffectiveOpen}
+                  aria-controls={`${sectionId}-global`}
+                  onClick={() => { setGlobalOpen(!globalEffectiveOpen) }}
                 >
-                  {t('installCancel')}
+                  <IconChevronDownOutline14 className={css.chevron} size={12} aria-hidden="true" />
+                  <span className={css.groupTitle}>{t('globalTitle')}</span>
                 </button>
               </div>
-            </div>
-          ) : null}
-
-          {/* Error banner */}
-          {actionError ? (
-            <p className={css.actionError} role="alert">{actionError}</p>
-          ) : null}
-
-          {/* Batch toolbar */}
-          {filteredEntries.length > 0 ? (
-            <div className={css.batchToolbar}>
-              <button
-                type="button"
-                className={css.batchSelectBtn}
-                disabled={batchInProgress}
-                onClick={selected.size === filteredEntries.length ? clearSelection : selectAllFiltered}
-              >
-                {selected.size === filteredEntries.length ? t('batchSelectNone') : t('batchSelectAll')}
-              </button>
-              {selected.size > 0 ? (
-                <>
-                  <span className={css.batchCount}>
-                    {t('batchSelected').replace('{count}', String(selected.size))}
-                  </span>
-                  <button
-                    type="button"
-                    className={css.batchEnableBtn}
-                    disabled={batchInProgress}
-                    onClick={() => { void handleBatch('enable') }}
-                  >
-                    {t('batchEnable')}
-                  </button>
-                  <button
-                    type="button"
-                    className={css.batchDisableBtn}
-                    disabled={batchInProgress}
-                    onClick={() => { void handleBatch('disable') }}
-                  >
-                    {t('batchDisable')}
-                  </button>
-                  <button
-                    type="button"
-                    className={css.batchUninstallBtn}
-                    disabled={batchInProgress}
-                    onClick={() => { void handleBatch('uninstall') }}
-                  >
-                    {batchInProgress ? t('batchInProgress') : t('batchUninstall')}
-                  </button>
-                </>
+              <p className={css.groupSub}>
+                {t('globalSubtitle')}
+                <span data-plugin-count={globalCount}>{` · ${String(globalCount)} ${t('countUnit')}`}</span>
+                {filteredFailed.length > 0 ? (
+                  <span className={css.failedCount}>{filteredFailed.length} {t('failedCountLabel')}</span>
+                ) : null}
+              </p>
+              {globalEffectiveOpen && globalCount > 0 ? (
+                <ul className={css.cards} id={`${sectionId}-global`}>
+                  {filteredFailed.map(entry => globalRowCard(entry))}
+                  {filteredRegular.map(entry => globalRowCard(
+                    entry,
+                    entry.enabled ? undefined : enabledIn.get(entry.moduleName),
+                  ))}
+                </ul>
               ) : null}
-            </div>
-          ) : null}
-
-          {/* Plugin count */}
-          <div className={css.catalogHeading}>
-            <h3>{t('catalog')}</h3>
-            <span data-plugin-count={filteredEntries.length}>{filteredEntries.length}</span>
-          </div>
-
-          {state.snapshot.entries.length === 0 ? <p className={css.status}>{t('empty')}</p> : null}
-          {state.snapshot.entries.length > 0 && filteredEntries.length === 0
-            ? <p className={css.status}>{t('emptySearch')}</p>
-            : null}
-          {filteredEntries.length > 0 ? (
-            <ul className={css.cards}>
-              {filteredEntries.map((entry) => {
-                const status = phaseLabel(entry.fiberPhase, t)
-                const title = moduleShortName(entry.moduleName)
-                const configuration = t(entry.enabled ? 'enabledTag' : 'disabledTag')
-                const sourceLabel = t(entry.source === 'builtin' ? 'builtinTag' : 'thirdPartyTag')
-                const open = expanded === entry.entryId
-                const detailId = `${catalogId}-details-${encodeURIComponent(entry.entryId)}`
-                const busy = actionInProgress === entry.entryId
-                return (
-                  <li
-                    className={css.card}
-                    key={entry.entryId}
-                    data-plugin-entry={entry.entryId}
-                    data-open={open ? 'true' : undefined}
-                    data-source={entry.source}
-                  >
-                    <input
-                      type="checkbox"
-                      className={css.cardCheckbox}
-                      checked={selected.has(entry.entryId)}
-                      disabled={batchInProgress}
-                      aria-label={`${title} ${t('source')}: ${sourceLabel}`}
-                      onChange={() => { toggleSelect(entry.entryId) }}
-                    />
-                    <button
-                      className={css.cardContent}
-                      type="button"
-                      aria-expanded={open}
-                      aria-controls={detailId}
-                      aria-label={entry.enabled ? `${title}, ${status}, ${configuration}` : `${title}, ${configuration}`}
-                      onClick={() => {
-                        setExpanded(current => current === entry.entryId ? null : entry.entryId)
-                      }}
-                    >
-                      <strong className={css.cardTitle} title={entry.moduleName}>{title}</strong>
-                      <span className={css.cardTrailing}>
-                        <span className={css.sourceTag} data-source={entry.source}>{sourceLabel}</span>
-                        {entry.enabled ? (
-                          <span
-                            className={css.statusDot}
-                            data-phase={entry.fiberPhase ?? 'unobserved'}
-                            role="img"
-                            aria-label={status}
-                            title={status}
-                          />
-                        ) : null}
-                        <span className={css.configTag} data-enabled={entry.enabled ? 'true' : 'false'}>
-                          {configuration}
-                        </span>
-                        <IconChevronDownOutline14 className={css.chevron} size={12} aria-hidden="true" />
-                      </span>
-                    </button>
-                    {open ? (
-                      <div className={css.cardDetails} id={detailId}>
-                        <code className={css.entryValue} data-loader-entry>{entry.entryId}</code>
-                        <dl className={css.details}>
-                          <div>
-                            <dt>{t('module')}</dt>
-                            <dd>{entry.moduleName}</dd>
-                          </div>
-                          <div>
-                            <dt>{t('description')}</dt>
-                            <dd>{entry.description}</dd>
-                          </div>
-                          <div>
-                            <dt>{t('source')}</dt>
-                            <dd>{sourceLabel}</dd>
-                          </div>
-                          <div>
-                            <dt>{t('type')}</dt>
-                            <dd>{entry.type}</dd>
-                          </div>
-                          <div>
-                            <dt>{t('configuration')}</dt>
-                            <dd>{configuration}</dd>
-                          </div>
-                          {entry.enabled ? (
-                            <div>
-                              <dt>{t('cordis')}</dt>
-                              <dd>{status}</dd>
-                            </div>
-                          ) : null}
-                        </dl>
-                        <div className={css.cardActions}>
-                          <button
-                            type="button"
-                            className={css.toggleBtn}
-                            disabled={busy}
-                            onClick={() => { void handleToggle(entry) }}
-                          >
-                            {busy ? t('toggling') : entry.enabled ? t('disable') : t('enable')}
-                          </button>
-                          <button
-                            type="button"
-                            className={css.uninstallBtn}
-                            disabled={busy || entry.source === 'builtin'}
-                            title={entry.source === 'builtin' ? t('builtinProtected') : undefined}
-                            onClick={() => { void handleUninstall(entry) }}
-                          >
-                            {busy ? t('uninstalling') : t('uninstall')}
-                          </button>
-                        </div>
-                      </div>
-                    ) : null}
-                  </li>
-                )
-              })}
-            </ul>
+            </section>
           ) : null}
         </div>
       ) : null}

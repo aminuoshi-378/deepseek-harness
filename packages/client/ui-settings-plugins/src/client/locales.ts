@@ -11,10 +11,12 @@ export type PluginsSettingsLocaleKey =
   | 'webSearchTitle' | 'webSearchDescription'
   | 'webSearchApiKey' | 'webSearchApiKeyHint' | 'webSearchApiKeySet' | 'webSearchApiKeyUnset'
   | 'webSearchBaseUrl' | 'webSearchBaseUrlHint' | 'webSearchMaxUses' | 'webSearchMaxUsesHint'
-  | 'tavilyTitle' | 'tavilyDescription'
-  | 'tavilyApiKey' | 'tavilyApiKeyHint' | 'tavilyApiKeySet' | 'tavilyApiKeyUnset'
-  | 'tavilyBaseUrl' | 'tavilyBaseUrlHint' | 'tavilyMaxResults' | 'tavilyMaxResultsHint'
-  | 'tavilySearchDepth' | 'tavilySearchDepthHint'
+  | 'subagentModelSelectionTitle' | 'subagentModelSelectionDescription'
+  | 'subagentModelSelectionToggle' | 'subagentModelSelectionChoose' | 'subagentModelSelectionAllowed'
+  | 'subagentModelSelectionLoading' | 'subagentModelSelectionLoadFailed' | 'subagentModelSelectionRetry'
+  | 'subagentModelSelectionPartial' | 'subagentModelSelectionUnavailable'
+  | 'subagentModelSelectionUnavailableGroup' | 'subagentModelSelectionEmpty'
+  | 'subagentModelSelectionRequired' | 'subagentModelSelectionConflict' | 'subagentModelSelectionOff'
 
 /** English copy. */
 export const en: Record<PluginsSettingsLocaleKey, string> = {
@@ -55,18 +57,21 @@ export const en: Record<PluginsSettingsLocaleKey, string> = {
   webSearchBaseUrlHint: 'Leave blank to use the provider default.',
   webSearchMaxUses: 'Max searches per request',
   webSearchMaxUsesHint: 'How many times one request may search before it must answer.',
-  tavilyTitle: 'Tavily web search',
-  tavilyDescription: 'The Tavily search provider.',
-  tavilyApiKey: 'API key',
-  tavilyApiKeyHint: 'Stored outside the settings file. Leave blank to keep the current key.',
-  tavilyApiKeySet: 'A key is configured.',
-  tavilyApiKeyUnset: 'No key is configured; search is unavailable until one is.',
-  tavilyBaseUrl: 'Endpoint',
-  tavilyBaseUrlHint: 'Leave blank to use the provider default. Enter the base host only; do not append /search (it is added automatically).',
-  tavilyMaxResults: 'Default result count',
-  tavilyMaxResultsHint: 'How many results one search returns unless the request overrides it.',
-  tavilySearchDepth: 'Extraction depth',
-  tavilySearchDepthHint: 'basic or advanced; advanced trades credits for richer extracts.',
+  subagentModelSelectionTitle: 'Subagent',
+  subagentModelSelectionDescription: 'Control which models agents may choose for subagents.',
+  subagentModelSelectionToggle: 'Allow agents to choose models for subagents',
+  subagentModelSelectionChoose: 'When enabled, agents can choose a provider, model, and reasoning effort for each subagent from the authorized models below. Applies only to new sessions.',
+  subagentModelSelectionAllowed: 'Models agents may choose',
+  subagentModelSelectionLoading: 'Loading models…',
+  subagentModelSelectionLoadFailed: 'Models could not be loaded.',
+  subagentModelSelectionRetry: 'Retry',
+  subagentModelSelectionPartial: 'Some model providers could not be loaded; saved choices remain removable.',
+  subagentModelSelectionUnavailable: 'Currently unavailable',
+  subagentModelSelectionUnavailableGroup: 'Saved but currently unavailable',
+  subagentModelSelectionEmpty: 'No model provider currently advertises a model.',
+  subagentModelSelectionRequired: 'Select at least one model before saving.',
+  subagentModelSelectionConflict: 'Settings changed elsewhere. Discard your draft and try again.',
+  subagentModelSelectionOff: 'Subagents use configured defaults or inherit the parent agent\'s model. Saved model choices are retained.',
 }
 
 /** Simplified Chinese copy. */
@@ -108,16 +113,19 @@ export const zh: Record<PluginsSettingsLocaleKey, string> = {
   webSearchBaseUrlHint: '留空则使用提供方默认地址。',
   webSearchMaxUses: '单次请求最多搜索次数',
   webSearchMaxUsesHint: '一次请求在必须作答前最多可以搜索多少次。',
-  tavilyTitle: 'Tavily 网页搜索',
-  tavilyDescription: 'Tavily 搜索提供方。',
-  tavilyApiKey: 'API Key',
-  tavilyApiKeyHint: '不写入设置文件。留空表示保持当前密钥。',
-  tavilyApiKeySet: '已配置密钥。',
-  tavilyApiKeyUnset: '未配置密钥；配置之前搜索不可用。',
-  tavilyBaseUrl: '接口地址',
-  tavilyBaseUrlHint: '留空则使用提供方默认地址。只填域名主地址，不要追加 /search（会自动补上）。',
-  tavilyMaxResults: '默认结果数',
-  tavilyMaxResultsHint: '一次搜索返回多少条结果，除非请求覆盖该值。',
-  tavilySearchDepth: '提取深度',
-  tavilySearchDepthHint: 'basic 或 advanced；advanced 用更多额度换取更丰富的摘要。',
+  subagentModelSelectionTitle: 'Subagent',
+  subagentModelSelectionDescription: '控制 Agent 为 Subagent 选择模型的权限。',
+  subagentModelSelectionToggle: '允许 Agent 为 Subagent 选择模型',
+  subagentModelSelectionChoose: '开启后，Agent 可以从下方授权模型中，为每个 Subagent 选择提供方、模型和推理强度。仅影响新会话。',
+  subagentModelSelectionAllowed: 'Agent 可选择的模型',
+  subagentModelSelectionLoading: '正在加载模型…',
+  subagentModelSelectionLoadFailed: '无法加载模型。',
+  subagentModelSelectionRetry: '重试',
+  subagentModelSelectionPartial: '部分模型提供方暂时无法加载；已保存的选择仍可移除。',
+  subagentModelSelectionUnavailable: '当前不可用',
+  subagentModelSelectionUnavailableGroup: '已保存但当前不可用',
+  subagentModelSelectionEmpty: '当前没有模型提供方公布模型。',
+  subagentModelSelectionRequired: '保存前请至少选择一个模型。',
+  subagentModelSelectionConflict: '设置已在其他位置更新。请放弃修改后重试。',
+  subagentModelSelectionOff: '关闭后，Subagent 使用配置的默认模型或继承父 Agent 的模型；已选模型会保留。',
 }
