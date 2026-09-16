@@ -12,16 +12,16 @@
  * card; the in-menu strip with Retry remains the catalog-load surface.
  */
 import {
-  useEffect, useId, useMemo, useRef, useState, useSyncExternalStore,
-  type KeyboardEvent, type FocusEvent,
+  useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore,
+  type CSSProperties, type KeyboardEvent, type FocusEvent,
 } from 'react'
+import { createPortal } from 'react-dom'
 import clsx from 'clsx'
 import type { ModelReasoningEffort, ModelSelection } from '@deepseek-ai/dsh-api-remotes/client'
 import {
   IconCheckOutline16, IconChevronDownOutline14, IconChevronRightOutline14,
-  IconWarningOutline16, Menu, Toast,
+  IconDataOutline16, IconWarningOutline16, Toast,
 } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { MenuEntry } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ModelSelectInjected } from './slots.ts'
 import css from './ModelSelect.module.css'
@@ -35,6 +35,9 @@ interface EffortChoice {
   effort: string | undefined
   label: string
 }
+
+/** Unplaced portal card: hidden but laid out at a fixed origin so offsetWidth/offsetHeight are real (Menu primitive's measure pass). */
+const MEASURE_STYLE: CSSProperties = { visibility: 'hidden', left: 0, top: 0 }
 
 /**
  * Render the composer model seat.
@@ -55,9 +58,6 @@ export function ModelSelect(
   // Model pane search: provider filter + free-text model name search.
   const [searchQuery, setSearchQuery] = useState('')
   const [providerFilter, setProviderFilter] = useState<string | null>(null)
-  const [providerMenuOpen, setProviderMenuOpen] = useState(false)
-  const providerMenuOpenRef = useRef(false)
-  useEffect(() => { providerMenuOpenRef.current = providerMenuOpen }, [providerMenuOpen])
   // The in-menu error strip serves catalog loads (its Retry re-runs the
   // load); a rejected SELECTION announces through the transient toast
   // instead, so the strip renders only while the latest failure-capable
@@ -67,6 +67,8 @@ export function ModelSelect(
   const toastSeq = useRef(0)
   const rootRef = useRef<HTMLDivElement | null>(null)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
+  const menuRef = useRef<HTMLDivElement | null>(null)
+  const [menuPos, setMenuPos] = useState<CSSProperties | null>(null)
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([])
   const id = useId()
 
@@ -121,18 +123,6 @@ export function ModelSelect(
       .filter(group => group.models.length > 0)
   }, [state.groups, providerFilter, searchQuery])
 
-  // True when a node lives on the portaled provider dropdown (rendered at
-  // document.body, i.e. outside rootRef). The ModelSelect panel itself is
-  // also a [role="menu"], but it sits inside rootRef, so the containing check
-  // below distinguishes the two. Guarded by the ref so the check never reads
-  // a stale listener closure.
-  const insideProviderList = (node: Node): boolean => {
-    if (!providerMenuOpenRef.current) return false
-    if (!(node instanceof Element)) return false
-    const menu = node.closest('[role="menu"]')
-    return menu !== null && rootRef.current?.contains(menu) === false
-  }
-
   const reload = (): void => {
     lastActionRef.current = 'load'
     load()
@@ -140,21 +130,49 @@ export function ModelSelect(
 
   useEffect(() => {
     if (!open) return
-    const closeOutside = (event: PointerEvent): void => {
-      const target = event.target as Node
-      // Self-tree: rootRef wraps the trigger and the in-place menu card.
-      if (rootRef.current?.contains(target) === true) return
-      // While the provider dropdown is open, the portaled list lives outside
-      // rootRef and clicks inside it should not close the parent panel.
-      // Use ref (not state) so the check never sees a stale listener closure.
-      if (insideProviderList(target)) return
+    const closeOutside = (event: MouseEvent): void => {
+      // The portaled card is outside the trigger subtree; check both.
+      if (rootRef.current?.contains(event.target as Node) === true) return
+      if (menuRef.current?.contains(event.target as Node) === true) return
       setOpen(false)
     }
-    // pointerdown capture fires BEFORE the Menu's bubble-phase pointerdown
-    // handler, so the portaled list is still mounted when we check.
-    document.addEventListener('pointerdown', closeOutside, true)
-    return () => { document.removeEventListener('pointerdown', closeOutside, true) }
+    document.addEventListener('mousedown', closeOutside)
+    return () => { document.removeEventListener('mousedown', closeOutside) }
   }, [open])
+
+  // Portaled placement (the Menu primitive's portal rules: fixed from the
+  // anchor rect, measured before paint, clamped inside the viewport): above
+  // the trigger, right edges aligned. Depends on pane and directory state
+  // because pane switches and async catalog loads resize the card.
+  /* jscpd:ignore-start -- deliberate mirror of ui-primitives useAnchoredPosition:
+     that hook only places from the anchor's LEFT edge, while this card aligns
+     right edges (x = rect.right - width), so the measure-and-clamp plumbing repeats. */
+  useLayoutEffect(() => {
+    if (!open) { setMenuPos(null); return }
+    const place = (): void => {
+      /* v8 ignore next 2 -- the trigger ref is attached whenever the menu is open. */
+      const rect = triggerRef.current?.getBoundingClientRect()
+      if (rect === undefined) return
+      const MARGIN = 12
+      const lw = menuRef.current?.offsetWidth ?? 0
+      const lh = menuRef.current?.offsetHeight ?? 0
+      let x = rect.right - lw
+      let y = rect.top - 8 - lh
+      if (lw > 0) x = Math.min(Math.max(x, MARGIN), window.innerWidth - lw - MARGIN)
+      if (lh > 0) y = Math.min(Math.max(y, MARGIN), window.innerHeight - lh - MARGIN)
+      setMenuPos({ left: x, top: y })
+    }
+    // First run measures the hidden pre-render (same commit as `open`), so
+    // the card lands placed before anything paints.
+    place()
+    window.addEventListener('scroll', place, true)
+    window.addEventListener('resize', place)
+    return () => {
+      window.removeEventListener('scroll', place, true)
+      window.removeEventListener('resize', place)
+    }
+  }, [open, pane, state])
+  /* jscpd:ignore-end */
 
   if (!available) return null
 
@@ -198,15 +216,10 @@ export function ModelSelect(
   }
 
   const onBlur = (event: FocusEvent<HTMLDivElement>): void => {
-    // Focus leaving the panel is fine, except when it lands on the portaled
-    // provider dropdown. Its relatedTarget sits outside rootRef, so without
-    // this guard a pointer selection of a provider would blur-close the whole
-    // model-selection panel. Closing only happens for the provider Menu's own
-    // onClose (outside click / Escape), which runs after selection completes.
-    if (event.relatedTarget instanceof Node) {
-      if (rootRef.current?.contains(event.relatedTarget)) return
-      if (insideProviderList(event.relatedTarget)) return
-    }
+    if (event.relatedTarget instanceof Node && (
+      rootRef.current?.contains(event.relatedTarget) === true
+      || menuRef.current?.contains(event.relatedTarget) === true
+    )) return
     close()
   }
 
@@ -286,15 +299,21 @@ export function ModelSelect(
           }
         }}
       >
+        <IconDataOutline16 className={css.triggerIcon} size={16} />
         <span className={css.triggerLabel}>{modelLabel}</span>
         {effortLabel !== undefined && <span className={css.triggerEffort}>{effortLabel}</span>}
         <IconChevronDownOutline14 className={clsx(css.chevron, open && css.chevronOpen)} />
       </button>
 
-      {open && (
+      {/* Portaled to body (Menu primitive's portal mode) so the sidebar and
+          column overflow clips cannot crop the card; synthetic events still
+          bubble through this React subtree, keeping onKeyDown/onBlur live. */}
+      {open && createPortal(
         <div
+          ref={menuRef}
           id={`${id}-menu`}
           className={css.menu}
+          style={menuPos ?? MEASURE_STYLE}
           role="menu"
           aria-label={t('menu.aria')}
           aria-busy={state.status === 'loading' || busy}
@@ -343,35 +362,17 @@ export function ModelSelect(
                     onChange={(e) => { setSearchQuery(e.target.value) }}
                     onKeyDown={(e) => { e.stopPropagation() }}
                   />
-                  <Menu
-                    open={providerMenuOpen}
-                    align="end"
-                    side="bottom"
-                    portal
-                    items={[
-                      { id: '', label: t('filter.allProviders') },
-                      ...state.groups.map(group => ({ id: group.id, label: group.name })),
-                    ] as MenuEntry[]}
-                    selectedId={providerFilter ?? ''}
-                    onSelect={(id) => { setProviderFilter(id === '' ? null : id); setProviderMenuOpen(false) }}
-                    onClose={() => { setProviderMenuOpen(false) }}
-                    anchor={
-                      <button
-                        type="button"
-                        className={css.providerSelect}
-                        onClick={() => { setProviderMenuOpen(v => !v) }}
-                      >
-                        <span className={css.providerSelectLabel}>
-                          {providerFilter === null
-                            ? t('filter.allProviders')
-                            : state.groups.find(g => g.id === providerFilter)?.name ?? providerFilter}
-                        </span>
-                        <span className={clsx(css.chevron, providerMenuOpen && css.chevronOpen)} aria-hidden>
-                          <IconChevronDownOutline14 />
-                        </span>
-                      </button>
-                    }
-                  />
+                  <select
+                    className={css.providerSelect}
+                    value={providerFilter ?? ''}
+                    onChange={(e) => { setProviderFilter(e.target.value === '' ? null : e.target.value) }}
+                    onKeyDown={(e) => { e.stopPropagation() }}
+                  >
+                    <option value="">{t('filter.allProviders')}</option>
+                    {state.groups.map(group => (
+                      <option key={group.id} value={group.id}>{group.name}</option>
+                    ))}
+                  </select>
                 </div>
               )}
               <div className={clsx(css.groups, 'scrollable')}>
@@ -448,7 +449,8 @@ export function ModelSelect(
                 ))}
             </>
           )}
-        </div>
+        </div>,
+        document.body,
       )}
       {toast !== null && (
         <Toast

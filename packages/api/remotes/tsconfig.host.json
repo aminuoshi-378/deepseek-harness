@@ -27,7 +27,13 @@
       "path": "../../interaction/commands"
     },
     {
+      "path": "../../interaction/permission-presets"
+    },
+    {
       "path": "../../llm/llm"
+    },
+    {
+      "path": "../../goal/goal"
     },
     {
       "path": "../../preset/agent-presets"
@@ -64,6 +70,9 @@
     },
     {
       "path": "../../typert/protocol"
+    },
+    {
+      "path": "../terminal-controller/tsconfig.host.json"
     }
   ]
 }
