@@ -1,28 +1,21 @@
 /**
- * Plugins settings surface, browser half — one section whose feature-owned
- * tabs include configurable Host plugin cards and read-only inventory.
- *
- * The section declares `settings.plugins.tab`; its own `configurable` tab then
- * declares `settings.plugin.item` and renders whatever cards were registered
- * into it. The cards this package ships are the host-plane sections the
- * deployment already exposes; each binds its namespace through the client
- * settings scope, which keeps them unaware of one another and of other tabs.
+ * Built-in plugins settings section, browser half: the shell around the
+ * feature-owned tabs registered into `settings.plugins.tab` (the read-only
+ * inventory ships one). The configuration pages of the host-plane plugins
+ * live in their own companion packages, which register into the Plugins
+ * page; this section owns the Settings navigation entry and the tab chrome
+ * only.
  */
 
 // Type-only: pulls the locale plugin's Context merge (ctx.locale).
 import type {} from '@deepseek-ai/dsh-client-locale/client'
-// Type-only: the settings shell's SlotMap merge (the 'settings.section' entry)
-// and the ctx.settingsScope Context merge. Cross-plugin collaboration goes
-// through the service, never a value import (client bundle purity gate).
+// Type-only: the settings shell's SlotMap merge (the 'settings.section'
+// entry). Cross-plugin collaboration goes through slots, never a value import
+// (client bundle purity gate).
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import { resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots'
-// Type-only: the ctx.remote Context merge and the forwarded-event key face.
-import type {} from '@deepseek-ai/dsh-api-remotes/client'
-import { AgentLoopCard } from './AgentLoopCard.tsx'
-import { BashCard } from './BashCard.tsx'
-import { ConfigurablePluginsTab } from './ConfigurablePluginsTab.tsx'
 import { PluginsSettingsSection } from './PluginsSettingsSection.tsx'
 import type { PluginsSettingsSectionInjected, PluginsSettingsTabEntry } from './PluginsSettingsSection.tsx'
 import { SubagentModelSelectionCard } from './SubagentModelSelectionCard.tsx'
@@ -56,12 +49,10 @@ export type { TavilyCardFace, TavilyCardState } from './tavily-card-controller.t
 const NS = 'settings.plugins'
 
 /** Required services (cordis fiber inject). */
-export const inject = [
-  'slots', 'locale', 'remote', 'remote.credentials', 'remote.session', 'settingsScope',
-]
+export const inject = ['slots', 'locale']
 
 /**
- * Mount the plugin configuration section and the cards this package ships.
+ * Mount the built-in plugins section.
  * @param ctx - the browser plugin context.
  */
 export function apply(ctx: ClientContext): void {
@@ -145,8 +136,8 @@ export function apply(ctx: ClientContext): void {
     },
   })
 
-  // This package owns the one Plugins navigation entry and the tab chrome;
-  // feature plugins contribute pages without competing for Settings nav rows.
+  // This package owns the one Built-in plugins navigation entry and the tab
+  // chrome; feature plugins contribute pages without competing for Settings nav rows.
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',
     id: 'plugins',
