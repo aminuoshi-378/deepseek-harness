@@ -3,7 +3,6 @@
 /** Simplified Chinese dictionary and key source of truth. */
 export const zh = {
   tab: '插件列表',
-  managementTab: '插件管理',
   loading: '正在读取插件…',
   clientSyncing: '正在同步本页面的插件…',
   clientSyncFailed: '本页面的插件未能完成同步；服务端的启用状态保持不变。',
@@ -43,29 +42,6 @@ export const zh = {
   active: '运行中',
   failed: '启动失败',
   unloading: '卸载中',
-  // ── 插件管理 ──
-  description: '用途',
-  install: '安装插件',
-  installModuleName: '模块名',
-  installModuleNamePlaceholder: '如 @scope/my-plugin',
-  installConfirm: '确认安装',
-  installCancel: '取消',
-  installing: '正在安装…',
-  installFailed: '安装失败',
-  // ── 批量操作 ──
-  batchEnable: '批量启用',
-  batchDisable: '批量禁用',
-  batchUninstall: '批量卸载',
-  batchSelectAll: '全选',
-  batchSelectNone: '取消全选',
-  batchSelected: '已选 {count} 项',
-  batchEnableConfirm: '确定要启用选中的 {count} 个插件吗？',
-  batchDisableConfirm: '确定要禁用选中的 {count} 个插件吗？',
-  batchUninstallConfirm: '确定要卸载选中的 {count} 个插件吗？',
-  batchInProgress: '正在批量操作…',
-  batchPartialFailed: '{failed} 个插件操作失败',
-  batchConfirm: '确认',
-  cancel: '取消',
 } satisfies Record<string, string>
 
 /** Plugin inventory locale key union. */
@@ -74,7 +50,6 @@ export type PluginInventoryLocaleKey = keyof typeof zh
 /** English dictionary checked against the Chinese key set. */
 export const en = {
   tab: 'Plugin list',
-  managementTab: 'Plugin management',
   loading: 'Reading plugins…',
   clientSyncing: 'Syncing plugins on this page…',
   clientSyncFailed: 'Some plugins could not sync on this page. Host enablement is unchanged.',
@@ -114,27 +89,4 @@ export const en = {
   active: 'Running',
   failed: 'Failed to start',
   unloading: 'Unloading',
-  // ── Plugin management ──
-  description: 'Purpose',
-  install: 'Install plugin',
-  installModuleName: 'Module name',
-  installModuleNamePlaceholder: 'e.g. @scope/my-plugin',
-  installConfirm: 'Confirm install',
-  installCancel: 'Cancel',
-  installing: 'Installing…',
-  installFailed: 'Install failed',
-  // ── Batch operations ──
-  batchEnable: 'Enable selected',
-  batchDisable: 'Disable selected',
-  batchUninstall: 'Uninstall selected',
-  batchSelectAll: 'Select all',
-  batchSelectNone: 'Clear selection',
-  batchSelected: '{count} selected',
-  batchEnableConfirm: 'Enable {count} selected plugins?',
-  batchDisableConfirm: 'Disable {count} selected plugins?',
-  batchUninstallConfirm: 'Uninstall {count} selected plugins?',
-  batchInProgress: 'Batch operation in progress…',
-  batchPartialFailed: '{failed} plugins failed',
-  batchConfirm: 'Confirm',
-  cancel: 'Cancel',
 } satisfies Record<PluginInventoryLocaleKey, string>
