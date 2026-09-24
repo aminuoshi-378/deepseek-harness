@@ -106,14 +106,9 @@ function resolveOptions(ctx: Context, config: Config): TavilySearchProviderOptio
  * @param config - plugin configuration; all fields optional.
  */
 export function apply(ctx: Context, config: Config): void {
-  let current: () => Config = () => config
-  ctx.inject(['settings'], (settingsCtx) => {
-    settingsCtx.settings.installSection(ctx, WEB_SEARCH_TAVILY_SETTINGS_NAMESPACE, Config, config, {
-      setSource: (source) => {
-        current = source
-      },
-      onChange: () => {},
-    })
-  })
-  ctx.web.registerSearchProvider(new TavilySearchProvider(() => resolveOptions(ctx, current())))
+  // The section is discovered automatically: SettingsForms projects every
+  // active plugin's Config schema through the configEditor, so the settings
+  // page serves this form without an installSection registration; a section
+  // edit re-resolves options on the very next search.
+  ctx.web.registerSearchProvider(new TavilySearchProvider(() => resolveOptions(ctx, config)))
 }
